@@ -1,4 +1,4 @@
-import { createCombatState, tickCombat } from '../core/combatLogic.js';
+import { createCombatState, tickCombat } from '../core/combat.js';
 
 export default class GameScene extends Phaser.Scene {
   constructor() {
@@ -8,6 +8,8 @@ export default class GameScene extends Phaser.Scene {
   }
 
   create() {
+    this.combatState = createCombatState();
+
     const hudStyle = {
       fontFamily: 'Arial',
       fontSize: '20px',
@@ -33,10 +35,14 @@ export default class GameScene extends Phaser.Scene {
       return;
     }
 
-    const { playerHp, monsterHp, gold } = this.combatState;
+    const { player, monster, gold, killCount } = this.combatState;
+    const playerHp = player?.hp ?? 0;
+    const playerMaxHp = player?.maxHp ?? 0;
+    const monsterHp = monster?.hp ?? 0;
+    const monsterMaxHp = monster?.maxHp ?? 0;
 
     this.hudText.setText(
-      `기사 HP ${playerHp} / 몬스터 HP ${monsterHp} / 골드 ${gold}`
+      `기사 HP ${playerHp} / ${playerMaxHp} | 몬스터 HP ${monsterHp} / ${monsterMaxHp} | 골드 ${gold} | 처치 ${killCount ?? 0}`
     );
   }
 }

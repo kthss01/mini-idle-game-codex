@@ -5,6 +5,26 @@ const BASE_MONSTER = {
 
 const DEFAULT_TICK_MS = 1000;
 
+export function createCombatState() {
+  const state = {
+    player: {
+      hp: 100,
+      maxHp: 100,
+      atk: 12,
+    },
+    gold: 0,
+    killCount: 0,
+    combat: {
+      elapsedMs: 0,
+      tickMs: DEFAULT_TICK_MS,
+    },
+  };
+
+  spawnMonster(state);
+
+  return state;
+}
+
 export function scaleDifficulty(state) {
   const kills = state.killCount ?? 0;
   const level = 1 + Math.floor(kills / 5);
