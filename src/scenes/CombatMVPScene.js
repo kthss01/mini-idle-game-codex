@@ -1,66 +1,44 @@
-import { createCombatState, tickCombat } from '../logic/combatLogic.js';
+import { createCombatState, tickCombat } from '../core/combatLogic.js';
 
 export default class CombatMVPScene extends Phaser.Scene {
   constructor() {
     super('CombatMVPScene');
     this.combatState = createCombatState();
-    this.playerHpText = null;
-    this.monsterHpText = null;
-    this.goldText = null;
-    this.killText = null;
+    this.hudText = null;
   }
 
   create() {
+    this.combatState = createCombatState();
+
     const hudStyle = {
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: 'Arial',
       fontSize: '20px',
-      color: '#f8fafc',
-      stroke: '#0f172a',
+      color: '#ffffff',
+      stroke: '#000000',
       strokeThickness: 4,
     };
 
-    this.playerHpText = this.add.text(24, 24, '', hudStyle);
-    this.monsterHpText = this.add.text(24, 60, '', hudStyle);
-    this.goldText = this.add.text(24, 96, '', hudStyle);
-    this.killText = this.add.text(24, 132, '', hudStyle);
+    this.hudText = this.add.text(16, 16, '', hudStyle);
+    this.hudText.setScrollFactor(0);
+    this.hudText.setDepth(1000);
 
-    this.updateAllTexts();
+    this.updateHud();
   }
 
-  update(_, delta) {
-    const { state } = tickCombat(this.combatState, delta);
-    this.combatState = state;
-
-    this.updatePlayerText();
-    this.updateGoldText();
-    this.updateKillText();
-    this.updateMonsterText();
+  update(time, delta) {
+    this.combatState = tickCombat(this.combatState, delta);
+    this.updateHud();
   }
 
-  updatePlayerText() {
-    const { player } = this.combatState;
-    this.playerHpText.setText(`플레이어 HP ${player.hp} / ${player.maxHp}`);
-  }
+  updateHud() {
+    if (!this.hudText) {
+      return;
+    }
 
-  updateMonsterText() {
-    const { monster } = this.combatState;
-    this.monsterHpText.setText(
-      `몬스터(Lv.${monster.level}) HP ${monster.hp} / ${monster.maxHp}`
+    const { playerHp = 0, monsterHp = 0, gold = 0 } = this.combatState ?? {};
+
+    this.hudText.setText(
+      `플레이어 HP ${playerHp} | 몬스터 HP ${monsterHp} | 골드 ${gold}`
     );
-  }
-
-  updateGoldText() {
-    this.goldText.setText(`골드 ${this.combatState.gold}`);
-  }
-
-  updateKillText() {
-    this.killText.setText(`처치 ${this.combatState.kills}`);
-  }
-
-  updateAllTexts() {
-    this.updatePlayerText();
-    this.updateMonsterText();
-    this.updateGoldText();
-    this.updateKillText();
   }
 }
