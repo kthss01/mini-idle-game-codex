@@ -1,9 +1,12 @@
-const http = require('http');
-const fs = require('fs');
-const path = require('path');
-const { URL } = require('url');
+import http from 'http';
+import fs from 'fs';
+import path from 'path';
+import { URL } from 'url';
+import { fileURLToPath } from 'url';
 
 const PORT = process.env.PORT || 3000;
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const ROOT_DIR = __dirname;
 
 const MIME_TYPES = {
