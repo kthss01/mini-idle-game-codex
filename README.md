@@ -11,6 +11,21 @@ codex 를 이용한 idle 게임 만들기
 - Pages 소스: `main` 브랜치 루트
 - `index.html` 과 `src/` 경로가 모두 상대 경로로 구성되어 있어 별도의 base path 설정이 필요하지 않습니다.
 
+
+## 전투 MVP 동작 검증
+
+PR2 요구사항(자동 처치/골드 획득 반복, 난이도 증가)을 빠르게 확인하려면 아래 명령을 실행하세요.
+
+```bash
+node scripts/verify-combat-loop.mjs
+```
+
+## GitHub Pages에서 변경이 안 보일 때
+
+- 저장소 **Settings → Pages → Build and deployment** 에서 Source가 `Deploy from a branch` + Branch `main` / Folder `/ (root)` 인지 확인합니다.
+- 브랜치/폴더가 `docs` 로 설정되어 있으면 현재 게임 엔트리(`index.html`, `src/`)가 배포되지 않아 최신 전투 화면이 보이지 않습니다.
+- 배포 후 브라우저 강력 새로고침(Windows/Linux `Ctrl+Shift+R`, macOS `Cmd+Shift+R`)으로 캐시 영향을 제거합니다.
+
 ## 충돌 점검
 
 ```bash
