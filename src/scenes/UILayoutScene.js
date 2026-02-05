@@ -25,6 +25,7 @@ const LOG_STYLE_BY_TYPE = {
 };
 
 const LOG_LINE_HEIGHT = 24;
+const COMBAT_INFO_BOTTOM_MARGIN = 84;
 
 export default class UILayoutScene extends Phaser.Scene {
   constructor() {
@@ -158,7 +159,8 @@ export default class UILayoutScene extends Phaser.Scene {
   }
 
   createCombatPanel(bounds) {
-    const centerY = bounds.y + bounds.h * 0.52;
+    const centerY = bounds.y + bounds.h * 0.42;
+    const combatInfoY = bounds.y + bounds.h - 132;
 
     this.ui.panelTitle = this.add.text(bounds.x + 20, bounds.y + 18, '전투 메인 화면', {
       fontFamily: 'Arial',
@@ -181,17 +183,25 @@ export default class UILayoutScene extends Phaser.Scene {
       color: UI_THEME.textSecondary,
     });
 
-    this.ui.combatMainInfo = this.add.text(bounds.x + 20, bounds.y + bounds.h - 150, '', {
+    this.ui.combatInfoBg = this.add
+      .rectangle(bounds.x + 16, combatInfoY - 10, bounds.w - 32, 108, 0x0b1220)
+      .setOrigin(0)
+      .setStrokeStyle(1, 0x334155)
+      .setAlpha(0.92);
+
+    this.ui.combatMainInfo = this.add.text(bounds.x + 28, combatInfoY, '', {
       fontFamily: 'Arial',
-      fontSize: '18px',
+      fontSize: '16px',
       color: UI_THEME.textPrimary,
-      lineSpacing: 8,
+      lineSpacing: 6,
+      wordWrap: { width: bounds.w - 56, useAdvancedWrap: true },
     });
 
-    this.ui.playHint = this.add.text(bounds.x + 20, bounds.y + bounds.h - 62, '', {
+    this.ui.playHint = this.add.text(bounds.x + 28, combatInfoY + COMBAT_INFO_BOTTOM_MARGIN, '', {
       fontFamily: 'Arial',
       fontSize: '14px',
-      color: UI_THEME.textSecondary,
+      color: '#bfdbfe',
+      wordWrap: { width: bounds.w - 56, useAdvancedWrap: true },
     });
   }
 
@@ -230,7 +240,10 @@ export default class UILayoutScene extends Phaser.Scene {
     this.ui.slotHint = this.add.text(bounds.x + 20, bounds.y + 250, '', {
       fontFamily: 'Arial',
       fontSize: '14px',
-      color: UI_THEME.warning,
+      color: '#fef08a',
+      stroke: '#000000',
+      strokeThickness: 3,
+      wordWrap: { width: bounds.w - 40, useAdvancedWrap: true },
     });
   }
 
@@ -410,6 +423,7 @@ export default class UILayoutScene extends Phaser.Scene {
 
   tryUpgradeHero() {
     if (this.combatState.gold < this.heroUpgradeCost) {
+      this.ui.slotHint.setColor('#f87171');
       this.ui.slotHint.setText(`골드가 부족합니다. (필요: ${this.heroUpgradeCost}G)`);
       return;
     }
@@ -427,6 +441,7 @@ export default class UILayoutScene extends Phaser.Scene {
 
     this.heroSlotLevel += 1;
     this.heroUpgradeCost = Math.floor(this.heroUpgradeCost * 1.55);
+    this.ui.slotHint.setColor('#86efac');
     this.ui.slotHint.setText('영웅 슬롯 강화 성공!');
     this.refreshUI();
   }
