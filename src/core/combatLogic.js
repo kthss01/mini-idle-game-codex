@@ -128,6 +128,7 @@ const resolveKill = (state) => {
     ...state,
     gold: rewardGold(state.gold, state.monster.goldReward),
     progression: {
+      ...state.progression,
       killCount: updatedKillCount,
       difficultyLevel: updatedDifficulty,
     },
