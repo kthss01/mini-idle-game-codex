@@ -1,44 +1,49 @@
+import assert from 'node:assert/strict';
+import { createCombatState } from '../src/core/combatLogic.js';
 import {
-  UpgradeType,
+  ProgressionUpgradeType,
   applyUpgrade,
   calcDps,
   calcSurvivability,
+  canAfford,
   getUpgradeCost,
 } from '../src/core/progression.js';
-import { createCombatState } from '../src/core/combatLogic.js';
 
-const assert = (condition, message) => {
-  if (!condition) {
-    throw new Error(message);
-  }
-};
+const attackCosts = Array.from(
+  { length: 20 },
+  (_, level) => getUpgradeCost(ProgressionUpgradeType.ATTACK, level),
+);
+const hpCosts = Array.from(
+  { length: 20 },
+  (_, level) => getUpgradeCost(ProgressionUpgradeType.HEALTH, level),
+);
 
-const baseState = createCombatState();
+for (let i = 1; i < attackCosts.length; i += 1) {
+  assert.ok(attackCosts[i] > attackCosts[i - 1], 'attack cost must strictly increase');
+  assert.ok(hpCosts[i] > hpCosts[i - 1], 'hp cost must strictly increase');
+}
 
-const atkCosts = Array.from({ length: 10 }, (_, i) => getUpgradeCost(UpgradeType.ATK, i));
-const hpCosts = Array.from({ length: 10 }, (_, i) => getUpgradeCost(UpgradeType.HP, i));
+assert.equal(canAfford(10, 10), true);
+assert.equal(canAfford(9, 10), false);
 
-assert(atkCosts.every((cost, idx) => idx === 0 || cost > atkCosts[idx - 1]), 'ATK cost should strictly increase');
-assert(hpCosts.every((cost, idx) => idx === 0 || cost > hpCosts[idx - 1]), 'HP cost should strictly increase');
+const baseState = { ...createCombatState(), gold: 1000 };
 
-const richState = { ...baseState, gold: 1000 };
-const atkResult = applyUpgrade(richState, UpgradeType.ATK);
-assert(atkResult.success, 'ATK upgrade should succeed');
-assert(atkResult.state.player.atk > richState.player.atk, 'ATK should increase');
-assert(atkResult.state.progression.upgrades.atkLevel === 1, 'ATK level should increase');
+const atkUpgraded = applyUpgrade(baseState, ProgressionUpgradeType.ATTACK);
+assert.notEqual(atkUpgraded, baseState);
+assert.equal(atkUpgraded.progression.upgrades.attackLevel, 1);
+assert.ok(atkUpgraded.player.atk > baseState.player.atk);
+assert.equal(atkUpgraded.gold, 1000 - getUpgradeCost(ProgressionUpgradeType.ATTACK, 0));
 
-const hpResult = applyUpgrade(richState, UpgradeType.HP);
-assert(hpResult.success, 'HP upgrade should succeed');
-assert(hpResult.state.player.maxHp > richState.player.maxHp, 'Max HP should increase');
-assert(hpResult.state.progression.upgrades.hpLevel === 1, 'HP level should increase');
+const hpUpgraded = applyUpgrade(baseState, ProgressionUpgradeType.HEALTH);
+assert.notEqual(hpUpgraded, baseState);
+assert.equal(hpUpgraded.progression.upgrades.healthLevel, 1);
+assert.ok(hpUpgraded.player.maxHp > baseState.player.maxHp);
+assert.equal(hpUpgraded.gold, 1000 - getUpgradeCost(ProgressionUpgradeType.HEALTH, 0));
 
-const poorState = { ...baseState, gold: 0 };
-const failResult = applyUpgrade(poorState, UpgradeType.ATK);
-assert(!failResult.success, 'Upgrade should fail when gold is insufficient');
+const poorState = { ...createCombatState(), gold: 0 };
+assert.equal(applyUpgrade(poorState, ProgressionUpgradeType.ATTACK), poorState);
 
-const dps = calcDps(baseState.player);
-const surv = calcSurvivability(baseState.player, baseState.monster);
-assert(dps > 0, 'DPS should be positive');
-assert(surv > 0, 'Survivability should be positive');
+assert.equal(calcDps({ atk: 50, cooldownMs: 1000 }), 50);
+assert.equal(calcSurvivability({ hp: 120 }, { atk: 20, cooldownMs: 1000 }), 6);
 
-console.log('verify-progression: ok');
+console.log('verify-progression: PASS');
