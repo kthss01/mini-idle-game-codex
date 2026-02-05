@@ -9,6 +9,8 @@ export default class CombatMVPScene extends Phaser.Scene {
     this.playerSprite = null;
     this.monsterSprite = null;
     this.lastMonsterKey = '';
+    this.lastLoggedEvent = '';
+    this.lastLoggedKillCount = -1;
   }
 
   create() {
@@ -36,13 +38,34 @@ export default class CombatMVPScene extends Phaser.Scene {
     this.infoText.setDepth(1000);
 
     this.lastMonsterKey = this.getMonsterKey(this.combatState.monster);
+    this.lastLoggedKillCount = this.combatState.progression.killCount;
     this.updateHud();
+    this.logCombatProgress();
   }
 
   update(time, delta) {
     this.combatState = tickCombat(this.combatState, delta);
     this.syncMonsterVisual();
     this.updateHud();
+    this.logCombatProgress();
+  }
+
+  logCombatProgress() {
+    const { combat, player, monster, gold, progression } = this.combatState;
+
+    if (combat.lastEvent !== this.lastLoggedEvent) {
+      this.lastLoggedEvent = combat.lastEvent;
+      console.log(
+        `[Combat] ${combat.lastEvent} | Hero ${player.hp}/${player.maxHp} | ${monster.name} ${monster.hp}/${monster.maxHp}`,
+      );
+    }
+
+    if (progression.killCount !== this.lastLoggedKillCount) {
+      this.lastLoggedKillCount = progression.killCount;
+      console.log(
+        `[Progress] kills=${progression.killCount}, gold=${gold}, difficulty=${progression.difficultyLevel}`,
+      );
+    }
   }
 
   getMonsterKey(monster) {

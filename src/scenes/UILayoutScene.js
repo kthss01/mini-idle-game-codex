@@ -85,5 +85,9 @@ export default class UILayoutScene extends Phaser.Scene {
       ],
       infoStyle,
     );
+
+    if (!this.scene.isActive('CombatMVPScene')) {
+      this.scene.launch('CombatMVPScene');
+    }
   }
 }
