@@ -489,12 +489,6 @@ export default class UILayoutScene extends Phaser.Scene {
 
   refreshUI() {
     const { player, monster, gold, progression, combat } = this.combatState;
-    const atkLevel = progression?.upgrades?.atkLevel ?? 0;
-    const hpLevel = progression?.upgrades?.hpLevel ?? 0;
-    const atkCost = getUpgradeCost(UpgradeType.ATK, atkLevel);
-    const hpCost = getUpgradeCost(UpgradeType.HP, hpLevel);
-    const dps = calcDps(player);
-    const survivability = calcSurvivability(player, monster);
     const currentStage = progression.difficultyLevel;
 
     const gems = Math.floor(progression.killCount / 15);
@@ -526,6 +520,9 @@ export default class UILayoutScene extends Phaser.Scene {
     ]);
     this.ui.attackUpgradeText?.setText(`공격력 강화 (비용 ${attackCost}G)`);
     this.ui.healthUpgradeText?.setText(`체력 강화 (비용 ${healthCost}G)`);
+    if (!this.upgradeFeedback) {
+      this.ui.slotHint?.setColor('#fef08a');
+    }
     this.ui.slotHint?.setText(this.upgradeFeedback || '강화 버튼으로 전투 체감을 올려보세요.');
 
     const tabMessage = {
