@@ -64,6 +64,8 @@ export const createCombatState = () => {
     progression: {
       killCount: 0,
       difficultyLevel: 1,
+      atkLevel: 0,
+      hpLevel: 0,
     },
     combat: {
       tick: 0,
