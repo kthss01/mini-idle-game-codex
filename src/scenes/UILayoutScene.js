@@ -1,4 +1,4 @@
-import { createCombatState, tickCombat } from '../core/combatLogic.js';
+import { CombatEventType, createCombatState, tickCombat } from '../core/combatLogic.js';
 
 const UI_THEME = {
   panelStroke: 0x1f2937,
@@ -14,21 +14,36 @@ const UI_THEME = {
   warning: 0xf59e0b,
 };
 
+const LOG_STYLE_BY_TYPE = {
+  [CombatEventType.AUTO_BATTLE_START]: { icon: '▶', color: '#22d3ee' },
+  [CombatEventType.AUTO_BATTLE_STOP]: { icon: '■', color: '#f97316' },
+  [CombatEventType.DAMAGE]: { icon: '⚔', color: '#fca5a5' },
+  [CombatEventType.MONSTER_DEFEATED]: { icon: '☠', color: '#facc15' },
+  [CombatEventType.GOLD_GAINED]: { icon: '💰', color: '#fde68a' },
+  [CombatEventType.SKILL_TRIGGERED]: { icon: '✨', color: '#c4b5fd' },
+  [CombatEventType.STAGE_CLEAR]: { icon: '🏁', color: '#86efac' },
+};
+
+const LOG_LINE_HEIGHT = 24;
+
 export default class UILayoutScene extends Phaser.Scene {
   constructor() {
     super('UILayoutScene');
     this.combatState = createCombatState();
     this.activeTab = '업그레이드';
-    this.showCombatDetails = false;
     this.heroSlotLevel = 0;
     this.heroUpgradeCost = 30;
     this.ui = {};
+    this.isLogPanelVisible = false;
+    this.logScrollOffset = 0;
+    this.logVisibleCount = 8;
   }
 
   create() {
     this.combatState = createCombatState();
     this.buildLayout();
     this.bindResize();
+    this.bindInputs();
     this.refreshUI();
   }
 
@@ -46,6 +61,19 @@ export default class UILayoutScene extends Phaser.Scene {
     });
   }
 
+  bindInputs() {
+    if (this.ui.f1HandlerBound) {
+      return;
+    }
+
+    this.input.keyboard?.on('keydown-F1', (event) => {
+      event?.preventDefault?.();
+      this.toggleLogPanel();
+    });
+
+    this.ui.f1HandlerBound = true;
+  }
+
   clearLayout() {
     Object.values(this.ui).forEach((item) => {
       if (Array.isArray(item)) {
@@ -54,7 +82,7 @@ export default class UILayoutScene extends Phaser.Scene {
       }
       item?.destroy?.();
     });
-    this.ui = {};
+    this.ui = { f1HandlerBound: true };
   }
 
   getLayout() {
@@ -90,6 +118,7 @@ export default class UILayoutScene extends Phaser.Scene {
     this.createCombatPanel(layout.middleLeft);
     this.createHeroSlotPanel(layout.middleRight);
     this.createBottomTabs(layout.bottom);
+    this.createLogPanel(layout);
   }
 
   drawPanel(bounds, fill) {
@@ -152,26 +181,14 @@ export default class UILayoutScene extends Phaser.Scene {
       color: UI_THEME.textSecondary,
     });
 
-    this.ui.combatMainInfo = this.add.text(bounds.x + 20, bounds.y + bounds.h - 130, '', {
+    this.ui.combatMainInfo = this.add.text(bounds.x + 20, bounds.y + bounds.h - 150, '', {
       fontFamily: 'Arial',
       fontSize: '18px',
       color: UI_THEME.textPrimary,
       lineSpacing: 8,
     });
 
-    this.ui.detailsToggle = this.add
-      .text(bounds.x + 20, bounds.y + bounds.h - 64, '▶ 전투 세부 수치 보기', {
-        fontFamily: 'Arial',
-        fontSize: '15px',
-        color: '#93c5fd',
-      })
-      .setInteractive({ useHandCursor: true })
-      .on('pointerup', () => {
-        this.showCombatDetails = !this.showCombatDetails;
-        this.refreshUI();
-      });
-
-    this.ui.combatDetails = this.add.text(bounds.x + 230, bounds.y + bounds.h - 64, '', {
+    this.ui.playHint = this.add.text(bounds.x + 20, bounds.y + bounds.h - 62, '', {
       fontFamily: 'Arial',
       fontSize: '14px',
       color: UI_THEME.textSecondary,
@@ -246,6 +263,151 @@ export default class UILayoutScene extends Phaser.Scene {
     });
   }
 
+  createLogPanel(layout) {
+    const panelW = Math.max(340, Math.floor(layout.width * 0.34));
+    const panelH = Math.max(220, Math.floor(layout.height * 0.42));
+    const panelX = layout.width - panelW - 18;
+    const panelY = layout.height - panelH - 18;
+
+    this.ui.logToggleButton = this.add
+      .rectangle(layout.width - 132, 12, 120, 38, 0x0b1220)
+      .setOrigin(0)
+      .setStrokeStyle(1, 0x475569)
+      .setInteractive({ useHandCursor: true })
+      .setDepth(20)
+      .on('pointerup', () => this.toggleLogPanel());
+
+    this.ui.logToggleText = this.add
+      .text(layout.width - 122, 22, '', {
+        fontFamily: 'Arial',
+        fontSize: '14px',
+        color: '#e2e8f0',
+      })
+      .setDepth(21);
+
+    this.ui.logPanelBg = this.add
+      .rectangle(panelX, panelY, panelW, panelH, 0x020617)
+      .setOrigin(0)
+      .setAlpha(0.96)
+      .setStrokeStyle(1, 0x334155)
+      .setDepth(40);
+
+    this.ui.logPanelTitle = this.add
+      .text(panelX + 12, panelY + 8, '개발 로그 패널 (F1 토글)', {
+        fontFamily: 'Arial',
+        fontSize: '14px',
+        color: '#bfdbfe',
+      })
+      .setDepth(41);
+
+    this.ui.logPanelHint = this.add
+      .text(panelX + 12, panelY + 28, '마우스 휠 또는 ▲▼ 버튼으로 스크롤', {
+        fontFamily: 'Arial',
+        fontSize: '12px',
+        color: '#94a3b8',
+      })
+      .setDepth(41);
+
+    this.ui.logScrollUp = this.add
+      .text(panelX + panelW - 52, panelY + 8, '▲', {
+        fontFamily: 'Arial',
+        fontSize: '15px',
+        color: '#e2e8f0',
+      })
+      .setDepth(41)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerup', () => this.scrollLog(-1));
+
+    this.ui.logScrollDown = this.add
+      .text(panelX + panelW - 28, panelY + 8, '▼', {
+        fontFamily: 'Arial',
+        fontSize: '15px',
+        color: '#e2e8f0',
+      })
+      .setDepth(41)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerup', () => this.scrollLog(1));
+
+    const viewportY = panelY + 50;
+    const viewportH = panelH - 64;
+    this.logVisibleCount = Math.max(3, Math.floor(viewportH / LOG_LINE_HEIGHT));
+
+    this.ui.logViewport = this.add
+      .zone(panelX + 10, viewportY, panelW - 20, viewportH)
+      .setOrigin(0)
+      .setInteractive({ useHandCursor: true });
+
+    this.ui.logViewport.on('wheel', (_pointer, _gameObject, _dx, dy) => {
+      this.scrollLog(dy > 0 ? 1 : -1);
+    });
+
+    this.ui.logLines = Array.from({ length: this.logVisibleCount }, (_, idx) => this.add
+      .text(panelX + 12, viewportY + idx * LOG_LINE_HEIGHT, '', {
+        fontFamily: 'Arial',
+        fontSize: '13px',
+        color: '#e2e8f0',
+        wordWrap: { width: panelW - 24, useAdvancedWrap: true },
+      })
+      .setDepth(41));
+
+    const logItems = [
+      this.ui.logPanelBg,
+      this.ui.logPanelTitle,
+      this.ui.logPanelHint,
+      this.ui.logScrollUp,
+      this.ui.logScrollDown,
+      this.ui.logViewport,
+      ...this.ui.logLines,
+    ];
+
+    logItems.forEach((item) => item.setVisible(this.isLogPanelVisible));
+    this.ui.logPanelItems = logItems;
+  }
+
+  toggleLogPanel() {
+    this.isLogPanelVisible = !this.isLogPanelVisible;
+    this.ui.logPanelItems?.forEach((item) => item.setVisible(this.isLogPanelVisible));
+    this.refreshUI();
+  }
+
+  scrollLog(direction) {
+    const eventCount = this.combatState.combatLog?.events?.length ?? 0;
+    const maxOffset = Math.max(0, eventCount - this.logVisibleCount);
+    this.logScrollOffset = Phaser.Math.Clamp(this.logScrollOffset + direction, 0, maxOffset);
+    this.renderLogList();
+  }
+
+  formatTimestamp(milliseconds) {
+    const totalSeconds = Math.floor((milliseconds ?? 0) / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  }
+
+  renderLogList() {
+    if (!this.ui.logLines) {
+      return;
+    }
+
+    const events = [...(this.combatState.combatLog?.events ?? [])].reverse();
+    const maxOffset = Math.max(0, events.length - this.logVisibleCount);
+    this.logScrollOffset = Phaser.Math.Clamp(this.logScrollOffset, 0, maxOffset);
+
+    const visibleEvents = events.slice(this.logScrollOffset, this.logScrollOffset + this.logVisibleCount);
+
+    this.ui.logLines.forEach((line, idx) => {
+      const event = visibleEvents[idx];
+      if (!event) {
+        line.setText('');
+        return;
+      }
+
+      const style = LOG_STYLE_BY_TYPE[event.type] ?? { icon: '•', color: '#e2e8f0' };
+      line.setColor(style.color);
+      line.setText(`[${this.formatTimestamp(event.timestamp)}] ${style.icon} ${event.message}`);
+    });
+  }
+
   tryUpgradeHero() {
     if (this.combatState.gold < this.heroUpgradeCost) {
       this.ui.slotHint.setText(`골드가 부족합니다. (필요: ${this.heroUpgradeCost}G)`);
@@ -296,16 +458,10 @@ export default class UILayoutScene extends Phaser.Scene {
     this.ui.combatMainInfo?.setText([
       `현재 대상: ${monster.name} (Lv.${monster.level})`,
       `기사 HP ${player.hp}/${player.maxHp}  |  ${monster.name} HP ${monster.hp}/${monster.maxHp}`,
-      '자동전투 진행 중 · 핵심 정보만 기본 표시',
+      '자동전투 진행 중 · 일반 플레이 정보만 표시',
     ]);
 
-    this.ui.detailsToggle?.setText(this.showCombatDetails ? '▼ 전투 세부 수치 접기' : '▶ 전투 세부 수치 보기');
-    this.ui.combatDetails?.setVisible(this.showCombatDetails);
-    this.ui.combatDetails?.setText([
-      `공격력: 기사 ${player.atk} / 몬스터 ${monster.atk}`,
-      `쿨다운(ms): 기사 ${player.cooldownLeftMs} / 몬스터 ${monster.cooldownLeftMs}`,
-      `최근 이벤트: ${combat.lastEvent}`,
-    ]);
+    this.ui.playHint?.setText(`최근 전투 요약: ${combat.lastEvent}`);
 
     this.ui.slotInfo?.setText([
       `슬롯 이름: 기사단 메인 슬롯`,
@@ -315,7 +471,7 @@ export default class UILayoutScene extends Phaser.Scene {
     this.ui.upgradeText?.setText(`클릭 업그레이드 (${this.heroUpgradeCost}G)`);
 
     const tabMessage = {
-      업그레이드: '업그레이드 탭: 영웅 슬롯/장비 확장 영역. 현재 전투/슬롯 UI는 중단에 고정되어 문맥이 유지됩니다.',
+      업그레이드: '업그레이드 탭: 영웅 슬롯/장비 확장 영역. 플레이 화면은 핵심 진행 정보만 유지됩니다.',
       퀘스트: '퀘스트 탭 플레이스홀더: 일일/주간 퀘스트 목록이 들어올 영역입니다. (미개발 영역 배치 확정)',
       상점: '상점 탭 플레이스홀더: 재화 소비형 패키지/소모품 목록이 들어올 영역입니다. (미개발 영역 배치 확정)',
     };
@@ -330,7 +486,10 @@ export default class UILayoutScene extends Phaser.Scene {
       '반응형 기준',
       '- 최소 해상도: 960x540 유지',
       '- 패널 비율: 상단 14% / 중단 64%(좌64:우36) / 하단 22%',
-      '- 오버플로 처리: 하단 탭 본문은 줄바꿈 처리, 핵심 HUD는 고정',
+      '- 개발자 이벤트 로그: 우측 하단 도킹 패널(F1/버튼 토글)',
     ]);
+
+    this.ui.logToggleText?.setText(this.isLogPanelVisible ? '로그 숨기기 (F1)' : '로그 보기 (F1)');
+    this.renderLogList();
   }
 }
