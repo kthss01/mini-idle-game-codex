@@ -541,8 +541,6 @@ export default class UILayoutScene extends Phaser.Scene {
       '- 개발자 이벤트 로그: 우측 하단 도킹 패널(F1/버튼 토글)',
     ]);
 
-    this.ui.slotHint?.setColor(this.feedbackColor);
-    this.ui.slotHint?.setText(this.feedbackMessage || '업그레이드 버튼으로 성장 곡선을 확인해보세요.');
 
     this.ui.logToggleText?.setText(this.isLogPanelVisible ? '로그 숨기기 (F1)' : '로그 보기 (F1)');
     this.renderLogList();
