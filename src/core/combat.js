@@ -1,124 +1,173 @@
+/**
+ * @typedef {Object} PlayerState
+ * @property {number} hp
+ * @property {number} maxHp
+ * @property {number} atk
+ * @property {number} atkSpeed
+ * @property {number} nextAttackIn
+ */
+
+/**
+ * @typedef {Object} MonsterState
+ * @property {string} id
+ * @property {number} hp
+ * @property {number} maxHp
+ * @property {number} atk
+ * @property {number} atkSpeed
+ * @property {number} nextAttackIn
+ * @property {number} level
+ * @property {number} goldReward
+ */
+
+/**
+ * @typedef {Object} ProgressionState
+ * @property {number} monsterLevel
+ * @property {number} kills
+ */
+
+/**
+ * @typedef {Object} GameState
+ * @property {PlayerState} player
+ * @property {MonsterState} monster
+ * @property {number} gold
+ * @property {ProgressionState} progression
+ */
+
 const BASE_MONSTER = {
   hp: 20,
+  atk: 2,
+  atkSpeed: 1.6,
+  goldReward: 5,
+};
+
+const BASE_PLAYER = {
+  hp: 30,
+  maxHp: 30,
   atk: 4,
+  atkSpeed: 1.2,
 };
 
-const DEFAULT_TICK_MS = 1000;
+const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
-const DEFAULTS = {
-  player: {
-    hp: 100,
-    maxHp: 100,
-    atk: 12,
-  },
-  monster: {
-    level: 1,
-    hp: 0,
-    maxHp: 0,
-    atk: 0,
-  },
-  gold: 0,
-  killCount: 0,
-  combat: {
-    elapsedMs: 0,
-    tickMs: DEFAULT_TICK_MS,
-  },
+const scaleMonsterStats = (level) => {
+  const hp = Math.round(BASE_MONSTER.hp * (1 + level * 0.15));
+  const atk = Math.round(BASE_MONSTER.atk * (1 + level * 0.12));
+  const goldReward = Math.round(BASE_MONSTER.goldReward * (1 + level * 0.1));
+  return { hp, atk, goldReward };
 };
 
-const clampNumber = (value, fallback) => (Number.isFinite(value) ? value : fallback);
-
-const ensureState = (state) => {
-  const nextState = state ?? {};
-  nextState.player = { ...DEFAULTS.player, ...nextState.player };
-  nextState.monster = { ...DEFAULTS.monster, ...nextState.monster };
-  nextState.gold = clampNumber(nextState.gold, DEFAULTS.gold);
-  nextState.killCount = clampNumber(nextState.killCount, DEFAULTS.killCount);
-  nextState.combat = { ...DEFAULTS.combat, ...nextState.combat };
-  return nextState;
+/**
+ * Initialize a fresh state tree.
+ * @returns {GameState}
+ */
+export const createCombatState = () => {
+  const level = 1;
+  const monsterStats = scaleMonsterStats(level);
+  return {
+    player: {
+      ...BASE_PLAYER,
+      nextAttackIn: BASE_PLAYER.atkSpeed,
+    },
+    monster: {
+      id: `monster-${level}`,
+      level,
+      hp: monsterStats.hp,
+      maxHp: monsterStats.hp,
+      atk: monsterStats.atk,
+      atkSpeed: BASE_MONSTER.atkSpeed,
+      nextAttackIn: BASE_MONSTER.atkSpeed,
+      goldReward: monsterStats.goldReward,
+    },
+    gold: 0,
+    progression: {
+      monsterLevel: level,
+      kills: 0,
+    },
+  };
 };
 
-export function createCombatState() {
-  const state = ensureState({});
+/**
+ * Spawn a new monster based on progression state.
+ * @param {GameState} state
+ * @returns {GameState}
+ */
+export const spawnMonster = (state) => {
+  const nextLevel = state.progression.monsterLevel + 1;
+  const monsterStats = scaleMonsterStats(nextLevel);
+  return {
+    ...state,
+    progression: {
+      ...state.progression,
+      monsterLevel: nextLevel,
+    },
+    monster: {
+      id: `monster-${nextLevel}`,
+      level: nextLevel,
+      hp: monsterStats.hp,
+      maxHp: monsterStats.hp,
+      atk: monsterStats.atk,
+      atkSpeed: BASE_MONSTER.atkSpeed,
+      nextAttackIn: BASE_MONSTER.atkSpeed,
+      goldReward: monsterStats.goldReward,
+    },
+  };
+};
 
-  spawnMonster(state);
+/**
+ * Apply rewards for a kill and prepare next monster.
+ * @param {GameState} state
+ * @returns {GameState}
+ */
+export const applyKillRewards = (state) => {
+  const goldAfter = state.gold + state.monster.goldReward;
+  const withKill = {
+    ...state,
+    gold: goldAfter,
+    progression: {
+      ...state.progression,
+      kills: state.progression.kills + 1,
+    },
+  };
+  return spawnMonster(withKill);
+};
 
-  return state;
-}
+/**
+ * Simulate combat ticks. Pure function; returns new state.
+ * @param {GameState} state
+ * @param {number} deltaMs Milliseconds elapsed since last tick.
+ * @returns {GameState}
+ */
+export const tickCombat = (state, deltaMs) => {
+  if (deltaMs <= 0) {
+    return state;
+  }
 
-export function scaleDifficulty(state) {
-  const nextState = ensureState(state);
-  const kills = nextState.killCount ?? 0;
-  const level = 1 + Math.floor(kills / 5);
-  const hpScale = 1 + level * 0.2;
-  const atkScale = 1 + level * 0.15;
+  const dt = deltaMs / 1000;
+  const player = { ...state.player };
+  const monster = { ...state.monster };
 
-  nextState.difficulty = {
-    level,
-    hpScale,
-    atkScale,
+  player.nextAttackIn = clamp(player.nextAttackIn - dt, 0, player.atkSpeed);
+  monster.nextAttackIn = clamp(monster.nextAttackIn - dt, 0, monster.atkSpeed);
+
+  if (player.nextAttackIn === 0 && monster.hp > 0) {
+    monster.hp = Math.max(0, monster.hp - player.atk);
+    player.nextAttackIn = player.atkSpeed;
+  }
+
+  if (monster.nextAttackIn === 0 && monster.hp > 0) {
+    player.hp = Math.max(0, player.hp - monster.atk);
+    monster.nextAttackIn = monster.atkSpeed;
+  }
+
+  const nextState = {
+    ...state,
+    player,
+    monster,
   };
 
-  return nextState.difficulty;
-}
-
-export function spawnMonster(state) {
-  const nextState = ensureState(state);
-  const difficulty = scaleDifficulty(nextState);
-  const maxHp = Math.round(BASE_MONSTER.hp * difficulty.hpScale);
-  const atk = Math.round(BASE_MONSTER.atk * difficulty.atkScale);
-
-  nextState.monster = {
-    level: difficulty.level,
-    maxHp,
-    hp: maxHp,
-    atk,
-  };
-
-  return nextState.monster;
-}
-
-export function applyKillRewards(state) {
-  const nextState = ensureState(state);
-  const monsterLevel = nextState.monster?.level ?? 1;
-  const reward = 5 + monsterLevel * 2;
-
-  nextState.killCount = (nextState.killCount ?? 0) + 1;
-  nextState.gold = (nextState.gold ?? 0) + reward;
-
-  return reward;
-}
-
-export function tickCombat(state, deltaMs) {
-  const nextState = ensureState(state);
-
-  const tickMs = nextState.combat.tickMs ?? DEFAULT_TICK_MS;
-  nextState.combat.elapsedMs += clampNumber(deltaMs, 0);
-
-  while (nextState.combat.elapsedMs >= tickMs) {
-    nextState.combat.elapsedMs -= tickMs;
-
-    if (nextState.player.hp <= 0) {
-      nextState.player.hp = 0;
-      break;
-    }
-
-    const monsterAlive = nextState.monster.hp > 0;
-    if (!monsterAlive) {
-      applyKillRewards(nextState);
-      spawnMonster(nextState);
-      continue;
-    }
-
-    nextState.monster.hp -= nextState.player.atk;
-    if (nextState.monster.hp <= 0) {
-      nextState.monster.hp = 0;
-      applyKillRewards(nextState);
-      spawnMonster(nextState);
-      continue;
-    }
-
-    nextState.player.hp -= nextState.monster.atk;
+  if (monster.hp === 0) {
+    return applyKillRewards(nextState);
   }
 
   return nextState;
-}
+};
