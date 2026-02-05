@@ -1,13 +1,15 @@
+import { createCombatState, tickCombat } from "../core/combat.js";
+
 export default class GameScene extends Phaser.Scene {
   constructor() {
     super("GameScene");
-    this.playerHp = 100;
-    this.monsterHp = 80;
-    this.gold = 0;
+    this.combatState = null;
     this.hudText = null;
   }
 
   create() {
+    this.combatState = createCombatState();
+
     const hudStyle = {
       fontFamily: "Arial",
       fontSize: "20px",
@@ -23,7 +25,12 @@ export default class GameScene extends Phaser.Scene {
     this.updateHud();
   }
 
-  update() {
+  update(time, delta) {
+    if (!this.combatState) {
+      return;
+    }
+
+    tickCombat(this.combatState, delta);
     this.updateHud();
   }
 
@@ -32,8 +39,16 @@ export default class GameScene extends Phaser.Scene {
       return;
     }
 
+    const { playerHp, playerMaxHp, monsterHp, monsterMaxHp, gold, kills } =
+      this.combatState;
+
     this.hudText.setText(
-      `기사 HP ${this.playerHp} / 몬스터 HP ${this.monsterHp} / 골드 ${this.gold}`
+      [
+        `기사 HP ${playerHp} / ${playerMaxHp}`,
+        `몬스터 HP ${monsterHp} / ${monsterMaxHp}`,
+        `처치 ${kills}`,
+        `골드 ${gold}`,
+      ].join("\n")
     );
   }
 }
