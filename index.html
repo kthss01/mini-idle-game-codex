@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Mini Idle Game</title>
+    <title>Mini Idle Game - Phaser MVP</title>
     <style>
       :root {
         color-scheme: dark;
@@ -18,303 +18,63 @@
         min-height: 100vh;
         display: grid;
         place-items: center;
-        background: radial-gradient(circle at top, #1f2937, #0b1020 60%);
-        font-family: 'Pretendard', 'Noto Sans KR', Arial, sans-serif;
+        background: #0f172a;
+        font-family: Arial, sans-serif;
         color: #e2e8f0;
       }
 
-      .game {
-        width: min(92vw, 880px);
-        border: 1px solid #334155;
-        border-radius: 14px;
-        background: rgba(15, 23, 42, 0.9);
-        box-shadow: 0 22px 45px rgba(2, 6, 23, 0.55);
-        overflow: hidden;
+      .shell {
+        width: min(96vw, 980px);
       }
 
       .header {
-        padding: 14px 18px;
-        border-bottom: 1px solid #334155;
-        background: rgba(30, 41, 59, 0.75);
-        font-size: 18px;
-        font-weight: 700;
-      }
-
-      .arena {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 14px;
-        padding: 16px;
-      }
-
-      .panel {
-        padding: 14px;
-        border: 1px solid #334155;
-        border-radius: 10px;
-        background: rgba(15, 23, 42, 0.65);
-      }
-
-      .name {
-        font-size: 20px;
-        font-weight: 700;
-        margin: 0 0 10px;
-      }
-
-      .stat {
-        margin: 6px 0;
-        font-size: 14px;
-      }
-
-      .bar {
-        width: 100%;
-        height: 14px;
-        border-radius: 999px;
-        overflow: hidden;
-        background: #1e293b;
-        border: 1px solid #334155;
-        margin-top: 6px;
-      }
-
-      .bar > span {
-        display: block;
-        height: 100%;
-        transition: width 0.18s ease;
-      }
-
-      .hero-bar > span {
-        background: linear-gradient(90deg, #0ea5e9, #2563eb);
-      }
-
-      .monster-bar > span {
-        background: linear-gradient(90deg, #f97316, #ef4444);
-      }
-
-      .controls {
         display: flex;
         flex-wrap: wrap;
-        gap: 8px;
-        padding: 0 16px 16px;
-      }
-
-      button {
-        border: 1px solid #334155;
-        border-radius: 8px;
-        background: #1e293b;
-        color: #e2e8f0;
-        padding: 9px 12px;
-        font-weight: 600;
-        cursor: pointer;
-      }
-
-      button:hover {
-        background: #334155;
-      }
-
-      .log {
-        margin: 0 16px 16px;
-        border: 1px solid #334155;
-        border-radius: 10px;
-        padding: 10px;
-        height: 170px;
-        overflow: auto;
-        background: rgba(2, 6, 23, 0.65);
-        font-size: 13px;
-        line-height: 1.45;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 10px;
+        font-size: 14px;
+        color: #cbd5e1;
       }
 
       .badge {
-        display: inline-block;
-        margin-left: 8px;
-        font-size: 12px;
-        color: #f8fafc;
-        background: #16a34a;
+        padding: 4px 8px;
         border-radius: 999px;
-        padding: 3px 8px;
+        border: 1px solid #334155;
+        background: #1e293b;
+        font-weight: 700;
+      }
+
+      #game-root {
+        box-shadow: 0 20px 40px rgba(15, 23, 42, 0.65);
+        border-radius: 8px;
+        overflow: hidden;
+      }
+
+      .hint {
+        margin-top: 10px;
+        font-size: 13px;
+        color: #94a3b8;
+      }
+
+      code {
+        color: #f8fafc;
       }
     </style>
   </head>
   <body>
-    <main class="game">
-      <header class="header">
-        미니 방치형 전투 데모
-        <span class="badge" id="statusBadge">자동 전투 ON</span>
-      </header>
-
-      <section class="arena">
-        <article class="panel">
-          <h2 class="name">기사</h2>
-          <p class="stat" id="heroLevel"></p>
-          <p class="stat" id="heroAtk"></p>
-          <p class="stat" id="heroHpText"></p>
-          <div class="bar hero-bar"><span id="heroHpBar"></span></div>
-        </article>
-
-        <article class="panel">
-          <h2 class="name" id="monsterName">고블린</h2>
-          <p class="stat" id="monsterLevel"></p>
-          <p class="stat" id="monsterAtk"></p>
-          <p class="stat" id="monsterHpText"></p>
-          <div class="bar monster-bar"><span id="monsterHpBar"></span></div>
-        </article>
-      </section>
-
-      <section class="controls">
-        <button id="toggleAutoBtn">자동 전투 일시정지</button>
-        <button id="manualAttackBtn">수동 공격</button>
-        <button id="healBtn">회복 물약 사용</button>
-        <button id="resetBtn">초기화</button>
-      </section>
-
-      <section class="log" id="log"></section>
+    <main class="shell">
+      <div class="header">
+        <strong>Mini Idle Game (Phaser)</strong>
+        <span class="badge">자동 전투 MVP 실행 중</span>
+      </div>
+      <div id="game-root"></div>
+      <p class="hint">
+        현재 화면은 Phaser 씬(<code>UILayoutScene</code>, <code>CombatMVPScene</code>)을 그대로 사용합니다.
+      </p>
     </main>
 
-    <script>
-      (() => {
-        const heroNames = ['고블린', '슬라임', '오크', '다크 나이트', '골렘'];
-
-        const state = {
-          auto: true,
-          tickMs: 700,
-          gold: 0,
-          kills: 0,
-          hero: {
-            level: 1,
-            maxHp: 140,
-            hp: 140,
-            atk: 18,
-          },
-          monster: null,
-        };
-
-        const el = {
-          statusBadge: document.getElementById('statusBadge'),
-          heroLevel: document.getElementById('heroLevel'),
-          heroAtk: document.getElementById('heroAtk'),
-          heroHpText: document.getElementById('heroHpText'),
-          heroHpBar: document.getElementById('heroHpBar'),
-          monsterName: document.getElementById('monsterName'),
-          monsterLevel: document.getElementById('monsterLevel'),
-          monsterAtk: document.getElementById('monsterAtk'),
-          monsterHpText: document.getElementById('monsterHpText'),
-          monsterHpBar: document.getElementById('monsterHpBar'),
-          toggleAutoBtn: document.getElementById('toggleAutoBtn'),
-          manualAttackBtn: document.getElementById('manualAttackBtn'),
-          healBtn: document.getElementById('healBtn'),
-          resetBtn: document.getElementById('resetBtn'),
-          log: document.getElementById('log'),
-        };
-
-        function createMonster() {
-          const level = Math.floor(state.kills / 4) + 1;
-          const name = heroNames[(level - 1) % heroNames.length];
-          const maxHp = 70 + level * 24;
-          const atk = 7 + level * 3;
-          return { name, level, maxHp, hp: maxHp, atk };
-        }
-
-        function writeLog(message) {
-          const time = new Date().toLocaleTimeString('ko-KR', { hour12: false });
-          el.log.innerHTML = `<div>[${time}] ${message}</div>` + el.log.innerHTML;
-        }
-
-        function render() {
-          const { hero, monster } = state;
-          el.statusBadge.textContent = state.auto ? '자동 전투 ON' : '자동 전투 OFF';
-          el.statusBadge.style.background = state.auto ? '#16a34a' : '#475569';
-
-          el.heroLevel.textContent = `Lv.${hero.level} | 골드 ${state.gold} | 처치 ${state.kills}`;
-          el.heroAtk.textContent = `공격력: ${hero.atk}`;
-          el.heroHpText.textContent = `HP: ${hero.hp}/${hero.maxHp}`;
-          el.heroHpBar.style.width = `${Math.max(0, (hero.hp / hero.maxHp) * 100)}%`;
-
-          el.monsterName.textContent = monster.name;
-          el.monsterLevel.textContent = `Lv.${monster.level}`;
-          el.monsterAtk.textContent = `공격력: ${monster.atk}`;
-          el.monsterHpText.textContent = `HP: ${monster.hp}/${monster.maxHp}`;
-          el.monsterHpBar.style.width = `${Math.max(0, (monster.hp / monster.maxHp) * 100)}%`;
-
-          el.toggleAutoBtn.textContent = state.auto ? '자동 전투 일시정지' : '자동 전투 재개';
-        }
-
-        function levelUpIfNeeded() {
-          const nextLevel = Math.floor(state.kills / 5) + 1;
-          if (nextLevel > state.hero.level) {
-            state.hero.level = nextLevel;
-            state.hero.maxHp += 14;
-            state.hero.atk += 4;
-            state.hero.hp = state.hero.maxHp;
-            writeLog(`🎉 레벨 업! 기사 Lv.${state.hero.level} (ATK +4)`);
-          }
-        }
-
-        function fightOnce(byManual = false) {
-          const { hero, monster } = state;
-          if (hero.hp <= 0) {
-            writeLog('☠️ 기사가 쓰러져 30% 체력으로 부활합니다.');
-            hero.hp = Math.floor(hero.maxHp * 0.3);
-          }
-
-          monster.hp -= hero.atk;
-          writeLog(`${byManual ? '🖱️ 수동' : '⚔️ 자동'} 공격! ${monster.name}에게 ${hero.atk} 피해.`);
-
-          if (monster.hp <= 0) {
-            const reward = 12 + monster.level * 4;
-            state.gold += reward;
-            state.kills += 1;
-            writeLog(`✅ ${monster.name} 처치! +${reward} 골드 획득.`);
-            levelUpIfNeeded();
-            state.monster = createMonster();
-            render();
-            return;
-          }
-
-          hero.hp -= monster.atk;
-          writeLog(`💥 ${monster.name} 반격! 기사에게 ${monster.atk} 피해.`);
-          if (hero.hp < 0) hero.hp = 0;
-          render();
-        }
-
-        function resetGame() {
-          state.auto = true;
-          state.tickMs = 700;
-          state.gold = 0;
-          state.kills = 0;
-          state.hero = { level: 1, maxHp: 140, hp: 140, atk: 18 };
-          state.monster = createMonster();
-          el.log.innerHTML = '';
-          writeLog('게임이 초기화되었습니다.');
-          render();
-        }
-
-        el.toggleAutoBtn.addEventListener('click', () => {
-          state.auto = !state.auto;
-          writeLog(state.auto ? '▶️ 자동 전투를 재개했습니다.' : '⏸️ 자동 전투를 멈췄습니다.');
-          render();
-        });
-
-        el.manualAttackBtn.addEventListener('click', () => fightOnce(true));
-
-        el.healBtn.addEventListener('click', () => {
-          const heal = Math.min(state.hero.maxHp - state.hero.hp, 45);
-          if (heal <= 0) {
-            writeLog('🧪 이미 체력이 가득 차 있습니다.');
-            return;
-          }
-          state.hero.hp += heal;
-          writeLog(`🧪 회복 물약 사용! HP +${heal}`);
-          render();
-        });
-
-        el.resetBtn.addEventListener('click', resetGame);
-
-        setInterval(() => {
-          if (state.auto) {
-            fightOnce(false);
-          }
-        }, state.tickMs);
-
-        resetGame();
-      })();
-    </script>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.js"></script>
+    <script type="module" src="./src/main.js"></script>
   </body>
 </html>
