@@ -1,52 +1,49 @@
+import assert from 'node:assert/strict';
+import { createCombatState } from '../src/core/combatLogic.js';
 import {
-  UpgradeType,
+  ProgressionUpgradeType,
   applyUpgrade,
   calcDps,
   calcSurvivability,
+  canAfford,
   getUpgradeCost,
 } from '../src/core/progression.js';
-import { createCombatState } from '../src/core/combatLogic.js';
 
-const assert = (condition, message) => {
-  if (!condition) {
-    throw new Error(message);
-  }
-};
+const attackCosts = Array.from(
+  { length: 20 },
+  (_, level) => getUpgradeCost(ProgressionUpgradeType.ATTACK, level),
+);
+const hpCosts = Array.from(
+  { length: 20 },
+  (_, level) => getUpgradeCost(ProgressionUpgradeType.HEALTH, level),
+);
 
-const state = createCombatState();
-
-for (let level = 0; level < 20; level += 1) {
-  const atkCost = getUpgradeCost(UpgradeType.ATTACK, level);
-  const atkNext = getUpgradeCost(UpgradeType.ATTACK, level + 1);
-  assert(atkNext > atkCost, `공격 비용이 증가하지 않음: L${level}`);
-
-  const hpCost = getUpgradeCost(UpgradeType.HEALTH, level);
-  const hpNext = getUpgradeCost(UpgradeType.HEALTH, level + 1);
-  assert(hpNext > hpCost, `체력 비용이 증가하지 않음: L${level}`);
+for (let i = 1; i < attackCosts.length; i += 1) {
+  assert.ok(attackCosts[i] > attackCosts[i - 1], 'attack cost must strictly increase');
+  assert.ok(hpCosts[i] > hpCosts[i - 1], 'hp cost must strictly increase');
 }
 
-const noGoldResult = applyUpgrade(state, UpgradeType.ATTACK);
-assert(noGoldResult.purchased === false, '골드 부족인데 업그레이드 성공함');
+assert.equal(canAfford(10, 10), true);
+assert.equal(canAfford(9, 10), false);
 
-const fundedState = {
-  ...state,
-  gold: 500,
-};
+const baseState = { ...createCombatState(), gold: 1000 };
 
-const attackUpgradeResult = applyUpgrade(fundedState, UpgradeType.ATTACK);
-assert(attackUpgradeResult.purchased === true, '공격력 업그레이드 실패');
-assert(attackUpgradeResult.state.player.atk > fundedState.player.atk, '공격력이 증가하지 않음');
-assert(attackUpgradeResult.state.progression.atkLevel === 1, '공격 레벨이 증가하지 않음');
+const atkUpgraded = applyUpgrade(baseState, ProgressionUpgradeType.ATTACK);
+assert.notEqual(atkUpgraded, baseState);
+assert.equal(atkUpgraded.progression.upgrades.attackLevel, 1);
+assert.ok(atkUpgraded.player.atk > baseState.player.atk);
+assert.equal(atkUpgraded.gold, 1000 - getUpgradeCost(ProgressionUpgradeType.ATTACK, 0));
 
-const hpUpgradeResult = applyUpgrade(fundedState, UpgradeType.HEALTH);
-assert(hpUpgradeResult.purchased === true, '체력 업그레이드 실패');
-assert(hpUpgradeResult.state.player.maxHp > fundedState.player.maxHp, '최대 HP가 증가하지 않음');
-assert(hpUpgradeResult.state.progression.hpLevel === 1, '체력 레벨이 증가하지 않음');
+const hpUpgraded = applyUpgrade(baseState, ProgressionUpgradeType.HEALTH);
+assert.notEqual(hpUpgraded, baseState);
+assert.equal(hpUpgraded.progression.upgrades.healthLevel, 1);
+assert.ok(hpUpgraded.player.maxHp > baseState.player.maxHp);
+assert.equal(hpUpgraded.gold, 1000 - getUpgradeCost(ProgressionUpgradeType.HEALTH, 0));
 
-const dps = calcDps(fundedState.player);
-assert(dps > 0, 'DPS가 0 이하');
+const poorState = { ...createCombatState(), gold: 0 };
+assert.equal(applyUpgrade(poorState, ProgressionUpgradeType.ATTACK), poorState);
 
-const survivability = calcSurvivability(fundedState.player, fundedState.monster);
-assert(survivability > 0, '생존 시간 계산이 0 이하');
+assert.equal(calcDps({ atk: 50, cooldownMs: 1000 }), 50);
+assert.equal(calcSurvivability({ hp: 120 }, { atk: 20, cooldownMs: 1000 }), 6);
 
-console.log('verify-progression: ok');
+console.log('verify-progression: PASS');
