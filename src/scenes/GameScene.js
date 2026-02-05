@@ -35,14 +35,15 @@ export default class GameScene extends Phaser.Scene {
       return;
     }
 
-    const { player, monster, gold, killCount } = this.combatState;
+    const { player, monster, gold, progression } = this.combatState;
     const playerHp = player?.hp ?? 0;
     const playerMaxHp = player?.maxHp ?? 0;
     const monsterHp = monster?.hp ?? 0;
     const monsterMaxHp = monster?.maxHp ?? 0;
+    const killCount = progression?.kills ?? 0;
 
     this.hudText.setText(
-      `기사 HP ${playerHp} / ${playerMaxHp} | 몬스터 HP ${monsterHp} / ${monsterMaxHp} | 골드 ${gold} | 처치 ${killCount ?? 0}`
+      `기사 HP ${playerHp} / ${playerMaxHp} | 몬스터 HP ${monsterHp} / ${monsterMaxHp} | 골드 ${gold} | 처치 ${killCount}`
     );
   }
 }
