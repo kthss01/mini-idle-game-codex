@@ -17,7 +17,7 @@ git status -sb
 
 echo ""
 echo "[3/3] Conflict markers"
-if rg -n "<<<<<<<|=======|>>>>>>>" -S . --glob '!scripts/check-conflicts.sh'; then
+if rg -n "^(<<<<<<<|=======|>>>>>>>)" -S . --glob '!scripts/check-conflicts.sh'; then
   echo "(conflict markers detected above)"
 else
   echo "(no conflict markers found)"
