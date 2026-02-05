@@ -1,54 +1,70 @@
-export const monsterRoster = [
+export const monsterTiers = [
   {
-    id: 'goblin',
-    name: '고블린',
-    baseHp: 60,
-    baseAtk: 8,
-    baseGold: 12,
+    id: 'slime',
+    name: '초원 슬라임',
+    startLevel: 1,
+    baseHp: 48,
+    baseAtk: 5,
+    baseGold: 7,
+    hpTierMultiplier: 1,
+    atkTierMultiplier: 1,
+    goldTierMultiplier: 1,
   },
   {
-    id: 'wolf',
-    name: '늑대',
-    baseHp: 75,
-    baseAtk: 10,
-    baseGold: 15,
+    id: 'goblin',
+    name: '동굴 고블린',
+    startLevel: 6,
+    baseHp: 80,
+    baseAtk: 8,
+    baseGold: 11,
+    hpTierMultiplier: 1.2,
+    atkTierMultiplier: 1.12,
+    goldTierMultiplier: 1.15,
   },
   {
     id: 'skeleton',
-    name: '스켈레톤',
-    baseHp: 90,
+    name: '묘지 스켈레톤',
+    startLevel: 12,
+    baseHp: 128,
     baseAtk: 12,
-    baseGold: 20,
+    baseGold: 16,
+    hpTierMultiplier: 1.42,
+    atkTierMultiplier: 1.26,
+    goldTierMultiplier: 1.35,
   },
   {
-    id: 'ogre',
-    name: '오우거',
-    baseHp: 140,
+    id: 'orc',
+    name: '전초기지 오크',
+    startLevel: 20,
+    baseHp: 198,
     baseAtk: 18,
-    baseGold: 32,
+    baseGold: 24,
+    hpTierMultiplier: 1.72,
+    atkTierMultiplier: 1.48,
+    goldTierMultiplier: 1.6,
   },
 ];
 
 export const growthRules = {
-  hpMultiplierPerStage: 1.1,
-  atkMultiplierPerStage: 1.05,
-  goldMultiplierPerStage: 1.08,
+  hpPerLevelMultiplier: 1.08,
+  atkPerLevelMultiplier: 1.05,
+  goldPerLevelMultiplier: 1.06,
+  difficultyStepPerKills: 3,
 };
 
-export const equipmentTemplates = {
-  weapon: {
-    id: 'sword',
-    name: '검',
-    atkBonus: 4,
-  },
-  armor: {
-    id: 'armor',
-    name: '갑옷',
-    hpBonus: 25,
-  },
-  shield: {
-    id: 'shield',
-    name: '방패',
-    defBonus: 3,
-  },
+export const playerBaseStats = {
+  hp: 140,
+  atk: 17,
+  attackCooldownMs: 700,
+};
+
+export const combatRules = {
+  logicTickMs: 100,
+  monsterAttackCooldownMs: 1200,
+};
+
+export const futureGrowthNotes = {
+  gearUpgradeAtkPerTier: 0.14,
+  gearUpgradeHpPerTier: 0.18,
+  prestigeDifficultyReduction: 0.12,
 };

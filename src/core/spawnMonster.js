@@ -1,34 +1,37 @@
-import { growthRules, monsterRoster } from '../design/balance.js';
+import { growthRules, monsterTiers } from '../design/balance.js';
 
-const clampStage = (stage) => Math.max(1, Math.floor(stage));
+const clampDifficulty = (difficultyLevel) => Math.max(1, Math.floor(difficultyLevel));
 
-export const spawnMonster = (stage = 1, preferredId = null) => {
-  const normalizedStage = clampStage(stage);
-  const roster = monsterRoster;
-  const fallbackIndex = (normalizedStage - 1) % roster.length;
-  const template = preferredId
-    ? roster.find((monster) => monster.id === preferredId) ?? roster[fallbackIndex]
-    : roster[fallbackIndex];
+export const getMonsterTierForLevel = (difficultyLevel) => {
+  const normalized = clampDifficulty(difficultyLevel);
+  const sortedTiers = [...monsterTiers].sort((a, b) => a.startLevel - b.startLevel);
 
-  const hpMultiplier = Math.pow(
-    growthRules.hpMultiplierPerStage,
-    normalizedStage - 1
+  return (
+    sortedTiers
+      .filter((tier) => tier.startLevel <= normalized)
+      .at(-1) ?? sortedTiers[0]
   );
-  const atkMultiplier = Math.pow(
-    growthRules.atkMultiplierPerStage,
-    normalizedStage - 1
-  );
-  const goldMultiplier = Math.pow(
-    growthRules.goldMultiplierPerStage,
-    normalizedStage - 1
-  );
+};
+
+export const spawnMonster = (difficultyLevel = 1) => {
+  const level = clampDifficulty(difficultyLevel);
+  const tier = getMonsterTierForLevel(level);
+  const levelOffset = Math.max(0, level - tier.startLevel);
+
+  const hpMultiplier = tier.hpTierMultiplier * Math.pow(growthRules.hpPerLevelMultiplier, levelOffset);
+  const atkMultiplier = tier.atkTierMultiplier * Math.pow(growthRules.atkPerLevelMultiplier, levelOffset);
+  const goldMultiplier = tier.goldTierMultiplier * Math.pow(growthRules.goldPerLevelMultiplier, levelOffset);
+
+  const hp = Math.round(tier.baseHp * hpMultiplier);
 
   return {
-    id: template.id,
-    name: template.name,
-    stage: normalizedStage,
-    hp: Math.round(template.baseHp * hpMultiplier),
-    atk: Math.round(template.baseAtk * atkMultiplier),
-    goldReward: Math.round(template.baseGold * goldMultiplier),
+    id: tier.id,
+    name: tier.name,
+    level,
+    tier: tier.id,
+    hp,
+    maxHp: hp,
+    atk: Math.round(tier.baseAtk * atkMultiplier),
+    goldReward: Math.round(tier.baseGold * goldMultiplier),
   };
 };
