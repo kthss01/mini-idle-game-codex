@@ -33,27 +33,65 @@
  * @property {ProgressionState} progression
  */
 
+import {
+  applyEquipmentBonus,
+  getRewardGold,
+  getScaledMonsterStats,
+  getMonsterById,
+} from '../logic/battleBalance.js';
+
 const BASE_MONSTER = {
-  hp: 20,
-  atk: 2,
   atkSpeed: 1.6,
-  goldReward: 5,
 };
 
 const BASE_PLAYER = {
-  hp: 30,
-  maxHp: 30,
-  atk: 4,
+  hp: 120,
+  atk: 18,
   atkSpeed: 1.2,
 };
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
-const scaleMonsterStats = (level) => {
-  const hp = Math.round(BASE_MONSTER.hp * (1 + level * 0.15));
-  const atk = Math.round(BASE_MONSTER.atk * (1 + level * 0.12));
-  const goldReward = Math.round(BASE_MONSTER.goldReward * (1 + level * 0.1));
-  return { hp, atk, goldReward };
+const DEFAULT_MONSTER_ID = getMonsterById().id;
+const DEFAULT_GROWTH_CURVE_ID = 'linear';
+const DEFAULT_EQUIPMENT_TIER_ID = 'common';
+
+const createPlayerStats = ({ tierId }) => {
+  const equipped = applyEquipmentBonus({
+    baseHp: BASE_PLAYER.hp,
+    baseAtk: BASE_PLAYER.atk,
+    tierId,
+  });
+
+  return {
+    hp: equipped.hp,
+    maxHp: equipped.hp,
+    atk: equipped.atk,
+    atkSpeed: BASE_PLAYER.atkSpeed,
+    nextAttackIn: BASE_PLAYER.atkSpeed,
+    equipmentTier: equipped.tier,
+  };
+};
+
+const createMonsterStats = ({ monsterId, killCount, growthCurveId }) => {
+  const scaled = getScaledMonsterStats({ monsterId, killCount, growthCurveId });
+  const rewardGold = getRewardGold({
+    monsterId,
+    killCount,
+    growthCurveId,
+  });
+
+  return {
+    id: scaled.id,
+    name: scaled.name,
+    level: killCount + 1,
+    hp: scaled.hp,
+    maxHp: scaled.hp,
+    atk: scaled.atk,
+    atkSpeed: BASE_MONSTER.atkSpeed,
+    nextAttackIn: BASE_MONSTER.atkSpeed,
+    goldReward: rewardGold,
+  };
 };
 
 /**
@@ -61,27 +99,21 @@ const scaleMonsterStats = (level) => {
  * @returns {GameState}
  */
 export const createCombatState = () => {
-  const level = 1;
-  const monsterStats = scaleMonsterStats(level);
+  const monsterId = DEFAULT_MONSTER_ID;
+  const growthCurveId = DEFAULT_GROWTH_CURVE_ID;
+  const equipmentTierId = DEFAULT_EQUIPMENT_TIER_ID;
+  const killCount = 0;
+
   return {
-    player: {
-      ...BASE_PLAYER,
-      nextAttackIn: BASE_PLAYER.atkSpeed,
-    },
-    monster: {
-      id: `monster-${level}`,
-      level,
-      hp: monsterStats.hp,
-      maxHp: monsterStats.hp,
-      atk: monsterStats.atk,
-      atkSpeed: BASE_MONSTER.atkSpeed,
-      nextAttackIn: BASE_MONSTER.atkSpeed,
-      goldReward: monsterStats.goldReward,
-    },
+    player: createPlayerStats({ tierId: equipmentTierId }),
+    monster: createMonsterStats({ monsterId, killCount, growthCurveId }),
     gold: 0,
     progression: {
-      monsterLevel: level,
-      kills: 0,
+      monsterLevel: 1,
+      kills: killCount,
+      monsterId,
+      growthCurveId,
+      equipmentTierId,
     },
   };
 };
@@ -93,23 +125,15 @@ export const createCombatState = () => {
  */
 export const spawnMonster = (state) => {
   const nextLevel = state.progression.monsterLevel + 1;
-  const monsterStats = scaleMonsterStats(nextLevel);
+  const killCount = state.progression.kills;
+  const { monsterId, growthCurveId } = state.progression;
   return {
     ...state,
     progression: {
       ...state.progression,
       monsterLevel: nextLevel,
     },
-    monster: {
-      id: `monster-${nextLevel}`,
-      level: nextLevel,
-      hp: monsterStats.hp,
-      maxHp: monsterStats.hp,
-      atk: monsterStats.atk,
-      atkSpeed: BASE_MONSTER.atkSpeed,
-      nextAttackIn: BASE_MONSTER.atkSpeed,
-      goldReward: monsterStats.goldReward,
-    },
+    monster: createMonsterStats({ monsterId, killCount, growthCurveId }),
   };
 };
 
