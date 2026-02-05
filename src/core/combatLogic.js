@@ -61,6 +61,10 @@ export const createCombatState = () => {
       cooldownLeftMs: combatRules.monsterAttackCooldownMs,
     },
     gold: 0,
+    atk: playerBaseStats.atk,
+    hp: playerBaseStats.hp,
+    atkLevel: 0,
+    hpLevel: 0,
     progression: {
       killCount: 0,
       difficultyLevel: 1,
@@ -172,7 +176,8 @@ const resolvePlayerDefeat = (state) => {
     ...state,
     player: {
       ...state.player,
-      hp: state.player.maxHp,
+      hp: state.hp,
+      maxHp: state.hp,
       cooldownLeftMs: state.player.cooldownMs,
     },
     combat: {
