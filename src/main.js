@@ -1,13 +1,20 @@
-import CombatMVPScene from './scenes/CombatMVPScene.js';
 import UILayoutScene from './scenes/UILayoutScene.js';
 
 const config = {
   type: Phaser.AUTO,
-  width: 960,
-  height: 540,
-  backgroundColor: '#0f172a',
+  width: 1280,
+  height: 720,
+  backgroundColor: '#0b1120',
   parent: 'game-root',
-  scene: [UILayoutScene, CombatMVPScene],
+  scale: {
+    mode: Phaser.Scale.FIT,
+    autoCenter: Phaser.Scale.CENTER_BOTH,
+    min: {
+      width: 960,
+      height: 540,
+    },
+  },
+  scene: [UILayoutScene],
 };
 
 new Phaser.Game(config);
