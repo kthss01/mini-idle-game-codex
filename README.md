@@ -20,6 +20,15 @@ PR2 요구사항(자동 처치/골드 획득 반복, 난이도 증가)을 빠르
 node scripts/verify-combat-loop.mjs
 ```
 
+
+## 로그 검증 스크립트
+
+전투 로그 순차성/상태 전환/로그 상한/스트레스 성능을 점검하려면 아래 명령을 실행하세요.
+
+```bash
+node scripts/validate-combat-log.mjs
+```
+
 ## GitHub Pages에서 변경이 안 보일 때
 
 - 저장소 **Settings → Pages → Build and deployment** 에서 Source가 `Deploy from a branch` + Branch `main` / Folder `/ (root)` 인지 확인합니다.
