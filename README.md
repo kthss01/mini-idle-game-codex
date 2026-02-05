@@ -59,3 +59,11 @@ node scripts/verify-progression.mjs
 
 원격 브랜치가 없다면 먼저 `git remote add origin <REMOTE_URL>` 후 `git fetch origin` 을 실행하거나,
 로컬에 존재하는 브랜치 이름을 인자로 전달합니다.
+
+## 문서 운영 원칙
+
+- 개발 작업 시 관련 문서 업데이트를 함께 진행합니다.
+- 문서는 가능한 한 한국어로 작성합니다.
+- 커밋/PR/머지 메시지도 가능한 한 한국어로 작성합니다.
+- 상세 정책은 `docs/documentation-policy.md` 를 참고하세요.
+
