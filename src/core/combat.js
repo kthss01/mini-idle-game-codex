@@ -60,7 +60,7 @@ const scaleMonsterStats = (level) => {
  * Initialize a fresh state tree.
  * @returns {GameState}
  */
-export const createInitialState = () => {
+export const createCombatState = () => {
   const level = 1;
   const monsterStats = scaleMonsterStats(level);
   return {
@@ -134,14 +134,15 @@ export const applyKillRewards = (state) => {
 /**
  * Simulate combat ticks. Pure function; returns new state.
  * @param {GameState} state
- * @param {number} dt Seconds elapsed since last tick.
+ * @param {number} deltaMs Milliseconds elapsed since last tick.
  * @returns {GameState}
  */
-export const tickCombat = (state, dt) => {
-  if (dt <= 0) {
+export const tickCombat = (state, deltaMs) => {
+  if (deltaMs <= 0) {
     return state;
   }
 
+  const dt = deltaMs / 1000;
   const player = { ...state.player };
   const monster = { ...state.monster };
 
