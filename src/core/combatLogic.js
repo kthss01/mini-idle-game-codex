@@ -176,8 +176,8 @@ const resolvePlayerDefeat = (state) => {
     ...state,
     player: {
       ...state.player,
-      hp: state.hp,
-      maxHp: state.hp,
+      hp: state.player.maxHp,
+      maxHp: state.player.maxHp,
       cooldownLeftMs: state.player.cooldownMs,
     },
     combat: {
