@@ -489,6 +489,12 @@ export default class UILayoutScene extends Phaser.Scene {
 
   refreshUI() {
     const { player, monster, gold, progression, combat } = this.combatState;
+    const atkLevel = progression?.upgrades?.atkLevel ?? 0;
+    const hpLevel = progression?.upgrades?.hpLevel ?? 0;
+    const atkCost = getUpgradeCost(UpgradeType.ATK, atkLevel);
+    const hpCost = getUpgradeCost(UpgradeType.HP, hpLevel);
+    const dps = calcDps(player);
+    const survivability = calcSurvivability(player, monster);
     const currentStage = progression.difficultyLevel;
 
     const gems = Math.floor(progression.killCount / 15);
