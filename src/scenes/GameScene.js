@@ -3,7 +3,7 @@ import { createCombatState, tickCombat } from '../core/combat.js';
 export default class GameScene extends Phaser.Scene {
   constructor() {
     super('GameScene');
-    this.combatState = createCombatState();
+    this.combatState = null;
     this.hudText = null;
   }
 
