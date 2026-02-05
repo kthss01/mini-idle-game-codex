@@ -1,3 +1,4 @@
+import GameScene from './scenes/GameScene.js';
 import UILayoutScene from './scenes/UILayoutScene.js';
 
 const config = {
@@ -6,7 +7,7 @@ const config = {
   height: 540,
   backgroundColor: '#0f172a',
   parent: 'game-root',
-  scene: [UILayoutScene],
+  scene: [UILayoutScene, GameScene],
 };
 
 new Phaser.Game(config);
