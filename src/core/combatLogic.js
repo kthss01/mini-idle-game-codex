@@ -68,6 +68,10 @@ export const createCombatState = () => {
     progression: {
       killCount: 0,
       difficultyLevel: 1,
+      upgrades: {
+        attackLevel: 0,
+        healthLevel: 0,
+      },
     },
     combat: {
       tick: 0,
@@ -128,6 +132,7 @@ const resolveKill = (state) => {
     ...state,
     gold: rewardGold(state.gold, state.monster.goldReward),
     progression: {
+      ...state.progression,
       killCount: updatedKillCount,
       difficultyLevel: updatedDifficulty,
     },

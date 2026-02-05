@@ -1,5 +1,11 @@
 import { CombatEventType, createCombatState, tickCombat } from '../core/combatLogic.js';
-import { UPGRADE_TYPE, applyUpgrade, calcDps, calcSurvivability, canAfford, getUpgradeCost } from '../core/progression.js';
+import {
+  ProgressionUpgradeType,
+  applyUpgrade,
+  calcDps,
+  calcSurvivability,
+  getUpgradeCost,
+} from '../core/progression.js';
 
 const UI_THEME = {
   panelStroke: 0x1f2937,
@@ -33,8 +39,7 @@ export default class UILayoutScene extends Phaser.Scene {
     super('UILayoutScene');
     this.combatState = createCombatState();
     this.activeTab = '업그레이드';
-    this.feedbackMessage = '';
-    this.feedbackColor = '#fef08a';
+    this.upgradeFeedback = '';
     this.ui = {};
     this.isLogPanelVisible = false;
     this.logScrollOffset = 0;
@@ -118,7 +123,7 @@ export default class UILayoutScene extends Phaser.Scene {
 
     this.createTopHUD(layout.top);
     this.createCombatPanel(layout.middleLeft);
-    this.createHeroSlotPanel(layout.middleRight);
+    this.createProgressionPanel(layout.middleRight);
     this.createBottomTabs(layout.bottom);
     this.createLogPanel(layout);
   }
@@ -206,15 +211,15 @@ export default class UILayoutScene extends Phaser.Scene {
     });
   }
 
-  createHeroSlotPanel(bounds) {
-    this.ui.heroTitle = this.add.text(bounds.x + 20, bounds.y + 18, '성장 & 경제', {
+  createProgressionPanel(bounds) {
+    this.ui.heroTitle = this.add.text(bounds.x + 20, bounds.y + 18, '성장 관리', {
       fontFamily: 'Arial',
       fontSize: '22px',
       color: UI_THEME.textPrimary,
       fontStyle: 'bold',
     });
 
-    this.ui.slotCard = this.add.rectangle(bounds.x + 20, bounds.y + 56, bounds.w - 40, 250, 0x0f1b2e)
+    this.ui.slotCard = this.add.rectangle(bounds.x + 20, bounds.y + 56, bounds.w - 40, 260, 0x0f1b2e)
       .setOrigin(0)
       .setStrokeStyle(1, 0x2b3b52);
 
@@ -226,12 +231,12 @@ export default class UILayoutScene extends Phaser.Scene {
     });
 
     this.ui.attackUpgradeButton = this.add
-      .rectangle(bounds.x + 34, bounds.y + 210, bounds.w - 68, 38, UI_THEME.accent)
+      .rectangle(bounds.x + 34, bounds.y + 170, bounds.w - 68, 38, UI_THEME.accent)
       .setOrigin(0)
       .setInteractive({ useHandCursor: true })
-      .on('pointerup', () => this.tryUpgrade(UPGRADE_TYPE.ATTACK));
+      .on('pointerup', () => this.tryApplyUpgrade(ProgressionUpgradeType.ATTACK));
 
-    this.ui.attackUpgradeText = this.add.text(bounds.x + 44, bounds.y + 219, '', {
+    this.ui.attackUpgradeText = this.add.text(bounds.x + 44, bounds.y + 179, '', {
       fontFamily: 'Arial',
       fontSize: '14px',
       color: '#082f49',
@@ -239,19 +244,19 @@ export default class UILayoutScene extends Phaser.Scene {
     });
 
     this.ui.healthUpgradeButton = this.add
-      .rectangle(bounds.x + 34, bounds.y + 254, bounds.w - 68, 38, 0x67e8f9)
+      .rectangle(bounds.x + 34, bounds.y + 220, bounds.w - 68, 38, UI_THEME.accent)
       .setOrigin(0)
       .setInteractive({ useHandCursor: true })
-      .on('pointerup', () => this.tryUpgrade(UPGRADE_TYPE.HEALTH));
+      .on('pointerup', () => this.tryApplyUpgrade(ProgressionUpgradeType.HEALTH));
 
-    this.ui.healthUpgradeText = this.add.text(bounds.x + 44, bounds.y + 263, '', {
+    this.ui.healthUpgradeText = this.add.text(bounds.x + 44, bounds.y + 229, '', {
       fontFamily: 'Arial',
       fontSize: '14px',
-      color: '#0c4a6e',
+      color: '#082f49',
       fontStyle: 'bold',
     });
 
-    this.ui.slotHint = this.add.text(bounds.x + 20, bounds.y + 320, '', {
+    this.ui.slotHint = this.add.text(bounds.x + 20, bounds.y + 328, '', {
       fontFamily: 'Arial',
       fontSize: '14px',
       color: '#fef08a',
@@ -435,47 +440,35 @@ export default class UILayoutScene extends Phaser.Scene {
     });
   }
 
-  getUpgradeSnapshot() {
-    return {
-      gold: this.combatState.gold,
-      atk: this.combatState.atk,
-      hp: this.combatState.hp,
-      atkLevel: this.combatState.atkLevel,
-      hpLevel: this.combatState.hpLevel,
-    };
-  }
+  tryApplyUpgrade(type) {
+    const upgradeLevels = this.combatState.progression.upgrades;
+    const currentLevel = type === ProgressionUpgradeType.ATTACK
+      ? upgradeLevels.attackLevel
+      : upgradeLevels.healthLevel;
+    const nextCost = getUpgradeCost(type, currentLevel);
 
-  tryUpgrade(type) {
-    const stats = this.getUpgradeSnapshot();
-    const level = type === UPGRADE_TYPE.ATTACK ? stats.atkLevel : stats.hpLevel;
-    const cost = getUpgradeCost(type, level);
-
-    if (!canAfford(stats.gold, cost)) {
-      this.feedbackColor = '#f87171';
-      this.feedbackMessage = `골드 부족: ${cost}G 필요`;
+    if (this.combatState.gold < nextCost) {
+      this.upgradeFeedback = `골드가 부족합니다. (필요: ${nextCost}G)`;
+      this.ui.slotHint.setColor('#f87171');
       this.refreshUI();
       return;
     }
 
-    const upgraded = applyUpgrade(stats, type);
-    const hpDelta = upgraded.hp - stats.hp;
-    this.combatState = {
-      ...this.combatState,
-      gold: upgraded.gold,
-      atk: upgraded.atk,
-      hp: upgraded.hp,
-      atkLevel: upgraded.atkLevel,
-      hpLevel: upgraded.hpLevel,
-      player: {
-        ...this.combatState.player,
-        atk: upgraded.atk,
-        maxHp: upgraded.hp,
-        hp: Math.min(upgraded.hp, this.combatState.player.hp + Math.max(0, hpDelta)),
-      },
-    };
+    const nextState = applyUpgrade(this.combatState, type);
+    const isSuccess = nextState !== this.combatState;
 
-    this.feedbackColor = '#86efac';
-    this.feedbackMessage = type === UPGRADE_TYPE.ATTACK ? '공격력 강화 성공! DPS 증가' : '체력 강화 성공! 생존력 증가';
+    if (!isSuccess) {
+      this.upgradeFeedback = '강화 실패: 상태를 확인해 주세요.';
+      this.ui.slotHint.setColor('#f87171');
+      this.refreshUI();
+      return;
+    }
+
+    this.combatState = nextState;
+    this.upgradeFeedback = type === ProgressionUpgradeType.ATTACK
+      ? '공격력 강화 성공!'
+      : '체력 강화 성공!';
+    this.ui.slotHint.setColor('#86efac');
     this.refreshUI();
   }
 
@@ -503,28 +496,31 @@ export default class UILayoutScene extends Phaser.Scene {
     this.ui.resourceTexts?.[1]?.valueText?.setText(`${gems}`);
     this.ui.resourceTexts?.[2]?.valueText?.setText(`${currentStage}`);
 
+    const dps = calcDps(player);
+    const survivability = calcSurvivability(player, monster);
+
     this.ui.combatMainInfo?.setText([
       `현재 대상: ${monster.name} (Lv.${monster.level})`,
       `기사 HP ${player.hp}/${player.maxHp}  |  ${monster.name} HP ${monster.hp}/${monster.maxHp}`,
-      '자동전투 진행 중 · 일반 플레이 정보만 표시',
+      `예상 DPS: ${dps} | 예상 생존 시간: ${survivability}초`,
     ]);
 
     this.ui.playHint?.setText(`최근 전투 요약: ${combat.lastEvent}`);
 
-    const attackCost = getUpgradeCost(UPGRADE_TYPE.ATTACK, this.combatState.atkLevel);
-    const healthCost = getUpgradeCost(UPGRADE_TYPE.HEALTH, this.combatState.hpLevel);
-    const dps = calcDps({ atk: player.atk, cooldownMs: player.cooldownMs });
-    const survivabilitySec = calcSurvivability({ hp: player.maxHp }, { atk: monster.atk, cooldownMs: monster.cooldownMs });
+    const attackLevel = progression.upgrades.attackLevel;
+    const healthLevel = progression.upgrades.healthLevel;
+    const attackCost = getUpgradeCost(ProgressionUpgradeType.ATTACK, attackLevel);
+    const healthCost = getUpgradeCost(ProgressionUpgradeType.HEALTH, healthLevel);
 
     this.ui.slotInfo?.setText([
-      `공격력 Lv.${this.combatState.atkLevel} | 체력 Lv.${this.combatState.hpLevel}`,
-      `현재 스탯: ATK ${player.atk} / HP ${player.hp}(${player.maxHp})`,
-      `체감 지표: DPS ${dps.toFixed(2)} | 예상 생존 ${survivabilitySec.toFixed(1)}초`,
-      `다음 비용: 공격력 ${attackCost}G · 체력 ${healthCost}G`,
+      '슬롯 이름: 기사단 성장 제단',
+      `공격력 강화 Lv.${attackLevel} | 체력 강화 Lv.${healthLevel}`,
+      `현재 공격력 ${player.atk} | 현재 최대HP ${player.maxHp}`,
+      `DPS ${dps} | 생존 ${survivability}초`,
     ]);
-
-    this.ui.attackUpgradeText?.setText(`공격력 강화 (비용 ${attackCost}G, +8%)`);
-    this.ui.healthUpgradeText?.setText(`체력 강화 (비용 ${healthCost}G, +10%)`);
+    this.ui.attackUpgradeText?.setText(`공격력 강화 (비용 ${attackCost}G)`);
+    this.ui.healthUpgradeText?.setText(`체력 강화 (비용 ${healthCost}G)`);
+    this.ui.slotHint?.setText(this.upgradeFeedback || '강화 버튼으로 전투 체감을 올려보세요.');
 
     const tabMessage = {
       업그레이드: '업그레이드 탭: 영웅 슬롯/장비 확장 영역. 플레이 화면은 핵심 진행 정보만 유지됩니다.',
