@@ -1,5 +1,5 @@
-import GameScene from "./scenes/GameScene.js";
-import UILayoutScene from "./scenes/UILayoutScene.js";
+import GameScene from './scenes/GameScene.js';
+import UILayoutScene from './scenes/UILayoutScene.js';
 
 const config = {
   type: Phaser.AUTO,
