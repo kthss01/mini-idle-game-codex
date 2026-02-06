@@ -343,11 +343,16 @@ export default class UILayoutScene extends Phaser.Scene {
   }
 
   createTopHUD(bounds) {
-    const toggleReservedWidth = this.isDebugUi ? TOGGLE_BUTTON_WIDTH + (TOP_UI_MARGIN * 2) : 0;
-    const actionReservedWidth = (TOP_ACTION_BUTTON_WIDTH * 3) + (TOP_ACTION_BUTTON_GAP * 2) + 24;
-    const slotAreaWidth = Math.max(360, bounds.w - toggleReservedWidth - actionReservedWidth);
+    const leftPadding = 18;
+    const topActionButtonCount = this.getTopActionButtonConfigs().length;
+    const actionReservedWidth = (TOP_ACTION_BUTTON_WIDTH * topActionButtonCount)
+      + (TOP_ACTION_BUTTON_GAP * Math.max(0, topActionButtonCount - 1));
+    const toggleReservedWidth = this.createToggleButtonLayout(bounds)
+      ? TOGGLE_BUTTON_WIDTH + TOP_ACTION_BUTTON_GAP
+      : 0;
+    const slotAreaWidth = Math.max(360, bounds.w - leftPadding - TOP_UI_MARGIN - actionReservedWidth - toggleReservedWidth);
     const slotWidth = slotAreaWidth / 3;
-    const slotStartX = bounds.x + 18;
+    const slotStartX = bounds.x + leftPadding;
 
     this.ui.resourceTexts = [
       this.createHUDItem(slotStartX, bounds.y + 14, slotWidth - 24, '골드', '0'),
@@ -359,15 +364,27 @@ export default class UILayoutScene extends Phaser.Scene {
   }
 
   createTopActionButtons(bounds) {
-    const rightOffset = TOGGLE_BUTTON_WIDTH + (TOP_UI_MARGIN * 3);
-    const totalWidth = (TOP_ACTION_BUTTON_WIDTH * 3) + (TOP_ACTION_BUTTON_GAP * 2);
-    const startX = bounds.x + bounds.w - rightOffset - totalWidth;
+    const actions = this.getTopActionButtonConfigs();
+    const toggleLayout = this.createToggleButtonLayout(bounds);
+    const totalWidth = (TOP_ACTION_BUTTON_WIDTH * actions.length) + (TOP_ACTION_BUTTON_GAP * Math.max(0, actions.length - 1));
+    const rightEdge = toggleLayout ? toggleLayout.logX - TOP_ACTION_BUTTON_GAP : bounds.x + bounds.w - TOP_UI_MARGIN;
+    const startX = rightEdge - totalWidth;
     const y = bounds.y + TOP_UI_MARGIN + 2;
 
-    this.ui.topActionButtons = [
-      this.createTopActionButton(startX, y, '저장', 0x0f766e, () => this.handleManualSave()),
-      this.createTopActionButton(startX + TOP_ACTION_BUTTON_WIDTH + TOP_ACTION_BUTTON_GAP, y, '불러오기', 0x1d4ed8, () => this.handleManualLoad()),
-      this.createTopActionButton(startX + (TOP_ACTION_BUTTON_WIDTH + TOP_ACTION_BUTTON_GAP) * 2, y, '타이틀로', 0x7c2d12, () => this.scene.start('TitleScene')),
+    this.ui.topActionButtons = actions.map((action, idx) => this.createTopActionButton(
+      startX + ((TOP_ACTION_BUTTON_WIDTH + TOP_ACTION_BUTTON_GAP) * idx),
+      y,
+      action.label,
+      action.color,
+      action.onClick,
+    ));
+  }
+
+  getTopActionButtonConfigs() {
+    return [
+      { label: '저장', color: 0x0f766e, onClick: () => this.handleManualSave() },
+      { label: '불러오기', color: 0x1d4ed8, onClick: () => this.handleManualLoad() },
+      { label: '타이틀로', color: 0x7c2d12, onClick: () => this.scene.start('TitleScene') },
     ];
   }
 
@@ -633,10 +650,13 @@ export default class UILayoutScene extends Phaser.Scene {
   }
 
 
-  getTopRightToggleLayout() {
-    const layout = this.getLayout();
-    const y = layout.top.y + TOP_UI_MARGIN;
-    const logX = layout.width - TOGGLE_BUTTON_WIDTH - TOP_UI_MARGIN;
+  createToggleButtonLayout(bounds = this.getLayout().top) {
+    if (!this.isDebugUi) {
+      return null;
+    }
+
+    const y = bounds.y + TOP_UI_MARGIN;
+    const logX = bounds.x + bounds.w - TOGGLE_BUTTON_WIDTH - TOP_UI_MARGIN;
     return { logX, y };
   }
 
@@ -646,7 +666,10 @@ export default class UILayoutScene extends Phaser.Scene {
     const panelX = layout.width - panelW - 18;
     const panelY = layout.height - panelH - 18;
 
-    const toggleLayout = this.getTopRightToggleLayout();
+    const toggleLayout = this.createToggleButtonLayout(layout.top);
+    if (!toggleLayout) {
+      return;
+    }
 
     this.ui.logToggleButton = this.add
       .rectangle(toggleLayout.logX, toggleLayout.y, TOGGLE_BUTTON_WIDTH, TOGGLE_BUTTON_HEIGHT, 0x0b1220)
@@ -756,7 +779,14 @@ export default class UILayoutScene extends Phaser.Scene {
 
   syncDockedPanelsLayout() {
     const layout = this.getLayout();
-    if (this.isLogPanelVisible && this.ui.logPanelBg) {
+    const toggleLayout = this.createToggleButtonLayout(layout.top);
+
+    if (toggleLayout && this.ui.logToggleButton && this.ui.logToggleText) {
+      this.ui.logToggleButton.setPosition(toggleLayout.logX, toggleLayout.y);
+      this.ui.logToggleText.setPosition(toggleLayout.logX + (TOGGLE_BUTTON_WIDTH / 2), toggleLayout.y + (TOGGLE_BUTTON_HEIGHT / 2));
+    }
+
+    if (this.ui.logPanelBg) {
       const logX = layout.width - this.ui.logPanelBg.width - 18;
       const logY = layout.height - this.ui.logPanelBg.height - 18;
       this.positionLogPanel(logX, logY);
@@ -1191,7 +1221,7 @@ export default class UILayoutScene extends Phaser.Scene {
 
     const tabMessage = {
       업그레이드: [
-        '업그레이드 탭: 장비/강화/상점 연동 완료. 장착/해제/비교가 가능합니다.',
+        '업그레이드 탭: 장착/해제/비교와 강화/상점 연동을 지원합니다.',
       ],
       퀘스트: [
         `일일 퀘스트 리셋 정책: ${objectives?.resetPolicy?.description ?? '로컬 자정 기준 리셋'}`,
@@ -1203,7 +1233,7 @@ export default class UILayoutScene extends Phaser.Scene {
         ...achievementLines,
       ],
       상점: [
-        '상점 탭: 골드를 소모해 장비를 구매할 수 있습니다.',
+        '상점 탭: 골드로 장비를 구매할 수 있습니다.',
         '퀘스트/업적 보상 상자도 동일한 장비 등급 테이블을 재사용합니다.',
       ],
     };
@@ -1229,7 +1259,7 @@ export default class UILayoutScene extends Phaser.Scene {
       '반응형 기준',
       '- 최소 해상도: 960x540 유지',
       '- 패널 비율: 상단 14% / 중단 64%(좌64:우36) / 하단 22%',
-      '- 개발자 이벤트 로그: debugUI=1에서만 노출',
+      '- 개발자 로그: debugUI=1에서만 표시',
     ]);
     if (this.ui.logPanelItems) {
       this.ui.logToggleText?.setText(this.isLogPanelVisible ? '로그 숨기기 (F1)' : '로그 보기 (F1)');
