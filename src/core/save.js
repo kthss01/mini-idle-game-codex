@@ -1,126 +1,128 @@
-const SAVE_VERSION = 1;
+import { createCombatState, nextMonsterLevel } from './combatLogic.js';
+import { spawnMonster } from './spawnMonster.js';
+import { combatRules, playerBaseStats } from '../design/balance.js';
 
-const asFiniteNumber = (value, fallback = 0) => {
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric : fallback;
+export const SAVE_VERSION = 1;
+export const SAVE_STORAGE_KEY = 'mini-idle-game-save-v1';
+
+const toSafeNumber = (value, fallback = 0) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
 };
 
-const asObject = (value, fallback = {}) => (value && typeof value === 'object' ? value : fallback);
+const toSafeInt = (value, fallback = 0) => Math.max(0, Math.floor(toSafeNumber(value, fallback)));
 
-export const SAVE_KEY = 'mini-idle-game-codex-save-v1';
+const clampStat = (value, min = 0, max = Number.MAX_SAFE_INTEGER) => {
+  const numeric = toSafeNumber(value, min);
+  return Math.min(max, Math.max(min, numeric));
+};
 
-export const buildSaveState = (gameState, now = Date.now()) => {
-  const state = asObject(gameState);
-  const player = asObject(state.player);
-  const progression = asObject(state.progression);
-  const combat = asObject(state.combat);
+export const buildSaveState = (gameState, now = Date.now()) => ({
+  version: SAVE_VERSION,
+  savedAt: Math.max(0, Math.floor(now)),
+  gold: toSafeInt(gameState?.gold, 0),
+  playerStats: {
+    atk: clampStat(gameState?.player?.atk, playerBaseStats.atk),
+    maxHp: clampStat(gameState?.player?.maxHp, playerBaseStats.hp),
+    hp: clampStat(gameState?.player?.hp, playerBaseStats.hp),
+    cooldownMs: clampStat(gameState?.player?.cooldownMs, playerBaseStats.attackCooldownMs),
+  },
+  progress: {
+    stage: toSafeInt(gameState?.progression?.difficultyLevel, 1) || 1,
+    wave: toSafeInt(gameState?.progression?.killCount, 0),
+    totalKills: toSafeInt(gameState?.progression?.killCount, 0),
+  },
+  equipment: {
+    owned: ['기사단 성장 제단'],
+    equipped: '기사단 성장 제단',
+    upgrades: {
+      attackLevel: toSafeInt(gameState?.progression?.upgrades?.attackLevel, 0),
+      healthLevel: toSafeInt(gameState?.progression?.upgrades?.healthLevel, 0),
+    },
+  },
+});
+
+const hydrateCombatState = (saveData) => {
+  const base = createCombatState();
+  const stage = Math.max(1, toSafeInt(saveData.progress?.stage, 1));
+  const killCount = toSafeInt(saveData.progress?.totalKills, 0);
+  const attackLevel = toSafeInt(saveData.equipment?.upgrades?.attackLevel, 0);
+  const healthLevel = toSafeInt(saveData.equipment?.upgrades?.healthLevel, 0);
+
+  const nextMonster = spawnMonster(stage);
+  const normalizedDifficulty = nextMonsterLevel(killCount);
+
+  const maxHp = clampStat(saveData.playerStats?.maxHp, 1);
+  const hp = clampStat(saveData.playerStats?.hp, 1, maxHp);
 
   return {
-    version: SAVE_VERSION,
-    savedAt: asFiniteNumber(now, Date.now()),
-    gold: asFiniteNumber(state.gold),
-    playerStats: {
-      atk: asFiniteNumber(player.atk),
-      maxHp: asFiniteNumber(player.maxHp),
-      hp: asFiniteNumber(player.hp),
-      cooldownMs: asFiniteNumber(player.cooldownMs),
-      cooldownLeftMs: asFiniteNumber(player.cooldownLeftMs),
+    ...base,
+    gold: toSafeInt(saveData.gold, 0),
+    player: {
+      ...base.player,
+      atk: clampStat(saveData.playerStats?.atk, playerBaseStats.atk),
+      maxHp,
+      hp,
+      cooldownMs: clampStat(saveData.playerStats?.cooldownMs, playerBaseStats.attackCooldownMs),
+      cooldownLeftMs: clampStat(saveData.playerStats?.cooldownMs, playerBaseStats.attackCooldownMs),
     },
-    progress: {
-      killCount: asFiniteNumber(progression.killCount),
-      difficultyLevel: asFiniteNumber(progression.difficultyLevel, 1),
+    monster: {
+      ...nextMonster,
+      cooldownMs: combatRules.monsterAttackCooldownMs,
+      cooldownLeftMs: combatRules.monsterAttackCooldownMs,
+    },
+    progression: {
+      ...base.progression,
+      killCount,
+      difficultyLevel: Math.max(stage, normalizedDifficulty),
       upgrades: {
-        attackLevel: asFiniteNumber(progression.upgrades?.attackLevel),
-        healthLevel: asFiniteNumber(progression.upgrades?.healthLevel),
-      },
-      combat: {
-        elapsedMs: asFiniteNumber(combat.elapsedMs),
-        tick: asFiniteNumber(combat.tick),
-      },
-    },
-    equipment: {
-      owned: ['attackUpgrade', 'healthUpgrade'],
-      equipped: {
-        attackLevel: asFiniteNumber(progression.upgrades?.attackLevel),
-        healthLevel: asFiniteNumber(progression.upgrades?.healthLevel),
+        attackLevel,
+        healthLevel,
       },
     },
   };
 };
 
-export const serializeSaveState = (gameState, now = Date.now()) => JSON.stringify(buildSaveState(gameState, now));
-
-export const parseRawSave = (rawSave) => {
-  if (typeof rawSave === 'string') {
-    try {
-      return JSON.parse(rawSave);
-    } catch (_error) {
-      return null;
-    }
-  }
-
-  return asObject(rawSave, null);
-};
-
 export const restoreState = (rawSave) => {
-  const parsed = parseRawSave(rawSave);
-  if (!parsed || parsed.version !== SAVE_VERSION) {
+  if (!rawSave || typeof rawSave !== 'object') {
     return {
-      version: SAVE_VERSION,
-      savedAt: 0,
-      gold: 0,
-      playerStats: {},
-      progress: {
-        upgrades: {
-          attackLevel: 0,
-          healthLevel: 0,
-        },
-      },
-      equipment: {
-        owned: [],
-        equipped: {
-          attackLevel: 0,
-          healthLevel: 0,
-        },
-      },
-      isValid: false,
+      state: createCombatState(),
+      meta: { isFallback: true, reason: 'invalid-save-object', savedAt: Date.now() },
     };
   }
 
-  const playerStats = asObject(parsed.playerStats);
-  const progress = asObject(parsed.progress);
-  const upgrades = asObject(progress.upgrades);
-
-  return {
-    version: SAVE_VERSION,
-    savedAt: asFiniteNumber(parsed.savedAt),
-    gold: Math.max(0, Math.floor(asFiniteNumber(parsed.gold))),
+  const normalizedSave = {
+    version: toSafeInt(rawSave.version, SAVE_VERSION),
+    savedAt: Math.max(0, toSafeInt(rawSave.savedAt, Date.now())),
+    gold: toSafeInt(rawSave.gold, 0),
     playerStats: {
-      atk: Math.max(1, Math.floor(asFiniteNumber(playerStats.atk, 1))),
-      maxHp: Math.max(1, Math.floor(asFiniteNumber(playerStats.maxHp, 1))),
-      hp: Math.max(0, Math.floor(asFiniteNumber(playerStats.hp, 1))),
-      cooldownMs: Math.max(1, Math.floor(asFiniteNumber(playerStats.cooldownMs, 700))),
-      cooldownLeftMs: Math.max(0, Math.floor(asFiniteNumber(playerStats.cooldownLeftMs, 700))),
+      atk: clampStat(rawSave.playerStats?.atk, playerBaseStats.atk),
+      maxHp: clampStat(rawSave.playerStats?.maxHp, playerBaseStats.hp),
+      hp: clampStat(rawSave.playerStats?.hp, playerBaseStats.hp),
+      cooldownMs: clampStat(rawSave.playerStats?.cooldownMs, playerBaseStats.attackCooldownMs),
     },
     progress: {
-      killCount: Math.max(0, Math.floor(asFiniteNumber(progress.killCount))),
-      difficultyLevel: Math.max(1, Math.floor(asFiniteNumber(progress.difficultyLevel, 1))),
+      stage: Math.max(1, toSafeInt(rawSave.progress?.stage, 1)),
+      wave: toSafeInt(rawSave.progress?.wave, 0),
+      totalKills: toSafeInt(rawSave.progress?.totalKills, rawSave.progress?.wave ?? 0),
+    },
+    equipment: {
+      owned: Array.isArray(rawSave.equipment?.owned) ? rawSave.equipment.owned : ['기사단 성장 제단'],
+      equipped: rawSave.equipment?.equipped ?? '기사단 성장 제단',
       upgrades: {
-        attackLevel: Math.max(0, Math.floor(asFiniteNumber(upgrades.attackLevel))),
-        healthLevel: Math.max(0, Math.floor(asFiniteNumber(upgrades.healthLevel))),
-      },
-      combat: {
-        elapsedMs: Math.max(0, Math.floor(asFiniteNumber(progress.combat?.elapsedMs))),
-        tick: Math.max(0, Math.floor(asFiniteNumber(progress.combat?.tick))),
+        attackLevel: toSafeInt(rawSave.equipment?.upgrades?.attackLevel, 0),
+        healthLevel: toSafeInt(rawSave.equipment?.upgrades?.healthLevel, 0),
       },
     },
-    equipment: asObject(parsed.equipment, {
-      owned: [],
-      equipped: {
-        attackLevel: 0,
-        healthLevel: 0,
-      },
-    }),
-    isValid: true,
+  };
+
+  return {
+    state: hydrateCombatState(normalizedSave),
+    meta: {
+      isFallback: false,
+      reason: null,
+      savedAt: normalizedSave.savedAt,
+      version: normalizedSave.version,
+    },
   };
 };

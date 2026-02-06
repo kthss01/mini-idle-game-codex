@@ -1,114 +1,104 @@
-import { growthRules } from '../design/balance.js';
-import { offlineRewardConfig } from '../design/offlineBalance.js';
+import { nextMonsterLevel } from './combatLogic.js';
 import { spawnMonster } from './spawnMonster.js';
+import { offlineRewardBalance } from '../design/offlineBalance.js';
+import { combatRules } from '../design/balance.js';
 
-const safeFloor = (value, fallback = 0) => {
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? Math.floor(numeric) : fallback;
-};
+const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
-const getKillRateMultiplier = (difficultyLevel, config) => {
-  const brackets = config.levelBrackets ?? [];
+const getStageMultiplier = (difficultyLevel, stageBrackets) => {
+  const currentStage = Math.max(1, Math.floor(difficultyLevel || 1));
   return (
-    brackets.find((entry) => difficultyLevel <= entry.maxDifficultyLevel)?.killRateMultiplier ?? 1
+    stageBrackets.find((bracket) => currentStage <= bracket.maxDifficulty)?.killRateMultiplier ?? 1
   );
 };
 
-const getNextDifficultyLevel = (killCount) =>
-  1 + Math.floor(Math.max(0, killCount) / growthRules.difficultyStepPerKills);
+const getPlayerDps = (state) => {
+  const atk = Math.max(0, state?.player?.atk ?? 0);
+  const cooldownMs = Math.max(1, state?.player?.cooldownMs ?? 1000);
+  return atk / (cooldownMs / 1000);
+};
 
-export const calculateOfflineReward = (state, offlineSec, balanceConfig = offlineRewardConfig) => {
-  if (!state || offlineSec <= 0) {
+const getCurrentMonsterHp = (state) => {
+  if (state?.monster?.maxHp) {
+    return Math.max(1, state.monster.maxHp);
+  }
+
+  const stage = Math.max(1, Math.floor(state?.progression?.difficultyLevel ?? 1));
+  return Math.max(1, spawnMonster(stage).maxHp);
+};
+
+export const calculateOfflineReward = (state, offlineSec, balanceConfig = offlineRewardBalance) => {
+  const safeOfflineSec = Math.max(0, Number(offlineSec) || 0);
+  const capSec = Math.max(0, balanceConfig.offlineCapSec ?? offlineRewardBalance.offlineCapSec);
+  const offlineSecApplied = Math.floor(clamp(safeOfflineSec, 0, capSec));
+
+  if (offlineSecApplied < (balanceConfig.minimumOfflineSec ?? 0)) {
     return {
       killsGained: 0,
       goldGained: 0,
-      offlineSecApplied: 0,
+      offlineSecApplied,
     };
   }
 
-  const cappedSec = Math.min(Math.max(0, offlineSec), balanceConfig.offlineCapSec ?? 0);
-  if (cappedSec <= 0) {
-    return {
-      killsGained: 0,
-      goldGained: 0,
-      offlineSecApplied: 0,
-    };
-  }
+  const playerDps = getPlayerDps(state);
+  const monsterHp = getCurrentMonsterHp(state);
+  const baseKillsPerSec = playerDps / monsterHp;
+  const stageMultiplier = getStageMultiplier(
+    state?.progression?.difficultyLevel,
+    balanceConfig.stageBrackets ?? offlineRewardBalance.stageBrackets
+  );
 
-  const playerAtk = Math.max(1, safeFloor(state.player?.atk, 1));
-  const playerMaxHp = Math.max(1, safeFloor(state.player?.maxHp, 1));
-  const playerCooldownMs = Math.max(1, safeFloor(state.player?.cooldownMs, 700));
-  const playerDps = playerAtk / (playerCooldownMs / 1000);
+  const effectiveKillsPerSec =
+    baseKillsPerSec *
+    (balanceConfig.offlineEfficiency ?? offlineRewardBalance.offlineEfficiency) *
+    stageMultiplier;
 
-  const efficiency = Math.max(0, Math.min(1, Number(balanceConfig.offlineEfficiency ?? 1)));
-  const defeatPenaltyMultiplier = Math.max(0, Math.min(1, Number(balanceConfig.defeatPenaltyMultiplier ?? 1)));
-
-  let remainingSec = cappedSec;
-  let currentKillCount = Math.max(0, safeFloor(state.progression?.killCount));
-  let currentDifficulty = Math.max(1, safeFloor(state.progression?.difficultyLevel, 1));
-  let killsGained = 0;
-  let goldGained = 0;
-
-  while (remainingSec > 0) {
-    const monster = spawnMonster(currentDifficulty);
-    const killRateMultiplier = getKillRateMultiplier(currentDifficulty, balanceConfig);
-    const effectiveDps = Math.max(0.001, playerDps * efficiency * killRateMultiplier);
-
-    const expectedKillTimeSec = monster.maxHp / effectiveDps;
-    if (!Number.isFinite(expectedKillTimeSec) || expectedKillTimeSec <= 0 || expectedKillTimeSec > remainingSec) {
-      break;
-    }
-
-    const incomingDamage = (monster.atk / 1.2) * expectedKillTimeSec;
-    const survivabilityMultiplier = incomingDamage > playerMaxHp ? defeatPenaltyMultiplier : 1;
-
-    remainingSec -= expectedKillTimeSec;
-    killsGained += 1;
-    goldGained += Math.floor(monster.goldReward * survivabilityMultiplier);
-
-    currentKillCount += 1;
-    currentDifficulty = getNextDifficultyLevel(currentKillCount);
-  }
+  const killsGained = Math.max(0, Math.floor(offlineSecApplied * effectiveKillsPerSec));
+  const baseGoldPerKill = Math.max(0, state?.monster?.goldReward ?? spawnMonster(1).goldReward);
+  const goldMultiplier = balanceConfig.goldEfficiency ?? offlineRewardBalance.goldEfficiency;
+  const goldGained = Math.max(0, Math.floor(killsGained * baseGoldPerKill * goldMultiplier));
 
   return {
     killsGained,
     goldGained,
-    offlineSecApplied: Math.floor(cappedSec - remainingSec),
+    offlineSecApplied,
   };
 };
 
 export const applyOfflineReward = (state, reward) => {
-  if (!state) {
+  const killsToAdd = Math.max(0, Math.floor(reward?.killsGained ?? 0));
+  const goldToAdd = Math.max(0, Math.floor(reward?.goldGained ?? 0));
+
+  if (killsToAdd === 0 && goldToAdd === 0) {
     return state;
   }
 
-  const killsGained = Math.max(0, safeFloor(reward?.killsGained));
-  const goldGained = Math.max(0, safeFloor(reward?.goldGained));
-
-  if (killsGained === 0 && goldGained === 0) {
-    return state;
-  }
-
-  const nextKillCount = Math.max(0, safeFloor(state.progression?.killCount) + killsGained);
-  const nextDifficultyLevel = getNextDifficultyLevel(nextKillCount);
-  const nextMonster = spawnMonster(nextDifficultyLevel);
+  const currentKills = Math.max(0, Math.floor(state?.progression?.killCount ?? 0));
+  const nextKillCount = currentKills + killsToAdd;
+  const nextDifficulty = nextMonsterLevel(nextKillCount);
+  const nextMonster = spawnMonster(nextDifficulty);
 
   return {
     ...state,
-    gold: Math.max(0, safeFloor(state.gold) + goldGained),
-    progression: {
-      ...state.progression,
-      killCount: nextKillCount,
-      difficultyLevel: nextDifficultyLevel,
+    gold: Math.max(0, Math.floor((state?.gold ?? 0) + goldToAdd)),
+    player: {
+      ...state.player,
+      hp: state.player.maxHp,
+      cooldownLeftMs: state.player.cooldownMs,
     },
     monster: {
       ...nextMonster,
-      cooldownMs: state.monster.cooldownMs,
-      cooldownLeftMs: state.monster.cooldownMs,
+      cooldownMs: combatRules.monsterAttackCooldownMs,
+      cooldownLeftMs: combatRules.monsterAttackCooldownMs,
+    },
+    progression: {
+      ...state.progression,
+      killCount: nextKillCount,
+      difficultyLevel: nextDifficulty,
     },
     combat: {
       ...state.combat,
-      lastEvent: `오프라인 보상: ${killsGained}마리 처치, ${goldGained}G 획득`,
+      lastEvent: `오프라인 보상: 처치 ${killsToAdd} · 골드 +${goldToAdd}`,
     },
   };
 };
