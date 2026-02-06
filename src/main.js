@@ -1,3 +1,4 @@
+import TitleScene from './scenes/TitleScene.js';
 import UILayoutScene from './scenes/UILayoutScene.js';
 
 const config = {
@@ -14,7 +15,7 @@ const config = {
       height: 540,
     },
   },
-  scene: [UILayoutScene],
+  scene: [TitleScene, UILayoutScene],
 };
 
 new Phaser.Game(config);
