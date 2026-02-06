@@ -1,4 +1,6 @@
 import { CombatEventType, createCombatState, tickCombat } from '../core/combatLogic.js';
+import { applyOfflineReward, calculateOfflineReward } from '../core/offlineReward.js';
+import { buildSaveState, restoreState, SAVE_STORAGE_KEY } from '../core/save.js';
 import {
   ProgressionUpgradeType,
   applyUpgrade,
@@ -47,20 +49,21 @@ export default class UILayoutScene extends Phaser.Scene {
     this.isLogPanelVisible = false;
     this.logScrollOffset = 0;
     this.logVisibleCount = 8;
-    this.saveIntervalMs = 5000;
-    this.saveTimer = null;
-    this.saveStorageKey = 'mini-idle-game-save-v1';
-    this.offlineSummary = null;
+    this.autoSaveTimer = null;
+    this.beforeUnloadHandler = null;
+    this.offlineRewardSummary = null;
   }
 
   create() {
-    this.loadCombatState();
+    this.combatState = this.loadGameState();
     this.buildLayout();
     this.bindResize();
     this.bindInputs();
     this.bindSaveHooks();
     this.startAutoSave();
     this.refreshUI();
+    this.showOfflineRewardNotice();
+    this.setupPersistence();
   }
 
 
@@ -154,6 +157,111 @@ export default class UILayoutScene extends Phaser.Scene {
     });
 
     this.ui.f1HandlerBound = true;
+  }
+
+  setupPersistence() {
+    this.autoSaveTimer?.remove?.(false);
+    this.autoSaveTimer = this.time.addEvent({
+      delay: 5000,
+      loop: true,
+      callback: () => this.saveGameState(),
+    });
+
+    this.beforeUnloadHandler = () => this.saveGameState();
+    window.addEventListener('beforeunload', this.beforeUnloadHandler);
+
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.teardownPersistence());
+    this.events.once(Phaser.Scenes.Events.DESTROY, () => this.teardownPersistence());
+  }
+
+  teardownPersistence() {
+    this.saveGameState();
+    this.autoSaveTimer?.remove?.(false);
+    this.autoSaveTimer = null;
+
+    if (this.beforeUnloadHandler) {
+      window.removeEventListener('beforeunload', this.beforeUnloadHandler);
+      this.beforeUnloadHandler = null;
+    }
+  }
+
+  loadGameState() {
+    const fallbackState = createCombatState();
+
+    const raw = window.localStorage.getItem(SAVE_STORAGE_KEY);
+    if (!raw) {
+      return fallbackState;
+    }
+
+    let parsedSave;
+    try {
+      parsedSave = JSON.parse(raw);
+    } catch (_error) {
+      window.localStorage.removeItem(SAVE_STORAGE_KEY);
+      this.offlineRewardSummary = {
+        message: '저장 데이터가 손상되어 새 게임으로 시작합니다.',
+      };
+      return fallbackState;
+    }
+
+    const restored = restoreState(parsedSave);
+    const now = Date.now();
+    const offlineSec = Math.max(0, (now - (restored.meta.savedAt ?? now)) / 1000);
+    const reward = calculateOfflineReward(restored.state, offlineSec);
+    const appliedState = applyOfflineReward(restored.state, reward);
+
+    if (restored.meta.isFallback) {
+      this.offlineRewardSummary = {
+        message: '저장 데이터를 복구하지 못해 기본 상태로 시작합니다.',
+      };
+      return fallbackState;
+    }
+
+    if (reward.killsGained > 0 || reward.goldGained > 0) {
+      this.offlineRewardSummary = {
+        message: `오프라인 ${reward.offlineSecApplied}초 동안 ${reward.killsGained}마리 처치, ${reward.goldGained}G 획득!`,
+      };
+    }
+
+    return appliedState;
+  }
+
+  saveGameState() {
+    const saveState = buildSaveState(this.combatState, Date.now());
+    window.localStorage.setItem(SAVE_STORAGE_KEY, JSON.stringify(saveState));
+  }
+
+  showOfflineRewardNotice() {
+    if (!this.offlineRewardSummary?.message) {
+      return;
+    }
+
+    const width = Math.max(this.scale.width, 960);
+    const panel = this.add
+      .rectangle(width / 2, 88, 640, 52, 0x0b1220)
+      .setStrokeStyle(2, 0x22d3ee)
+      .setDepth(3000)
+      .setAlpha(0.95);
+
+    const text = this.add
+      .text(width / 2, 88, this.offlineRewardSummary.message, {
+        fontFamily: 'Arial',
+        fontSize: '18px',
+        color: '#e2e8f0',
+      })
+      .setOrigin(0.5)
+      .setDepth(3001);
+
+    this.tweens.add({
+      targets: [panel, text],
+      alpha: 0,
+      duration: 450,
+      delay: 3800,
+      onComplete: () => {
+        panel.destroy();
+        text.destroy();
+      },
+    });
   }
 
   clearLayout() {
@@ -282,6 +390,13 @@ export default class UILayoutScene extends Phaser.Scene {
       fontFamily: 'Arial',
       fontSize: '14px',
       color: '#bfdbfe',
+      wordWrap: { width: bounds.w - 56, useAdvancedWrap: true },
+    });
+
+    this.ui.offlineRewardText = this.add.text(bounds.x + 28, combatInfoY + COMBAT_INFO_BOTTOM_MARGIN + 24, '', {
+      fontFamily: 'Arial',
+      fontSize: '13px',
+      color: '#86efac',
       wordWrap: { width: bounds.w - 56, useAdvancedWrap: true },
     });
   }
@@ -580,10 +695,8 @@ export default class UILayoutScene extends Phaser.Scene {
       `예상 DPS: ${dps} | 예상 생존 시간: ${survivability}초`,
     ]);
 
-    const offlineText = this.offlineSummary
-      ? ` | 오프라인 보상: ${this.offlineSummary.killsGained}마리 / ${this.offlineSummary.goldGained}G (${this.offlineSummary.offlineSecApplied}초)`
-      : '';
-    this.ui.playHint?.setText(`최근 전투 요약: ${combat.lastEvent}${offlineText}`);
+    this.ui.playHint?.setText(`최근 전투 요약: ${combat.lastEvent}`);
+    this.ui.offlineRewardText?.setText(this.offlineRewardSummary?.message || '');
 
     const attackLevel = progression.upgrades.attackLevel;
     const healthLevel = progression.upgrades.healthLevel;

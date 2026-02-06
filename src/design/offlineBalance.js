@@ -1,18 +1,14 @@
 export const offlineRewardBalance = Object.freeze({
   offlineCapSec: 8 * 60 * 60,
   offlineEfficiency: 0.75,
-  progressionBands: [
-    { maxDifficulty: 5, killRateMultiplier: 1 },
-    { maxDifficulty: 15, killRateMultiplier: 0.92 },
-    { maxDifficulty: 9999, killRateMultiplier: 0.84 },
+  goldEfficiency: 0.9,
+  minimumOfflineSec: 10,
+  stageBrackets: [
+    { maxDifficulty: 10, killRateMultiplier: 1 },
+    { maxDifficulty: 25, killRateMultiplier: 0.9 },
+    { maxDifficulty: Infinity, killRateMultiplier: 0.8 },
   ],
 });
 
-export const getOfflineKillRateMultiplier = (difficultyLevel) => {
-  const normalizedDifficulty = Math.max(1, Math.floor(difficultyLevel ?? 1));
-  return (
-    offlineRewardBalance.progressionBands
-      .find((band) => normalizedDifficulty <= band.maxDifficulty)
-      ?.killRateMultiplier ?? 1
-  );
-};
+// 하위 호환용 별칭: 기존 코드에서 offlineRewardConfig 이름을 참조하는 경우를 지원합니다.
+export const offlineRewardConfig = offlineRewardBalance;

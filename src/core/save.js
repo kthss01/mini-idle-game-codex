@@ -1,132 +1,128 @@
-import { createCombatState } from './combatLogic.js';
+import { createCombatState, nextMonsterLevel } from './combatLogic.js';
 import { spawnMonster } from './spawnMonster.js';
-import { combatRules } from '../design/balance.js';
+import { combatRules, playerBaseStats } from '../design/balance.js';
 
-export const SAVE_SCHEMA_VERSION = 1;
+export const SAVE_VERSION = 1;
+export const SAVE_STORAGE_KEY = 'mini-idle-game-save-v1';
 
-const normalizeNumber = (value, fallback = 0) => {
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric : fallback;
+const toSafeNumber = (value, fallback = 0) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
 };
 
-const normalizeInteger = (value, fallback = 0, min = 0) => {
-  const normalized = Math.floor(normalizeNumber(value, fallback));
-  return Math.max(min, normalized);
+const toSafeInt = (value, fallback = 0) => Math.max(0, Math.floor(toSafeNumber(value, fallback)));
+
+const clampStat = (value, min = 0, max = Number.MAX_SAFE_INTEGER) => {
+  const numeric = toSafeNumber(value, min);
+  return Math.min(max, Math.max(min, numeric));
 };
 
-const parseRawSave = (rawSave) => {
-  if (!rawSave) {
-    return null;
-  }
+export const buildSaveState = (gameState, now = Date.now()) => ({
+  version: SAVE_VERSION,
+  savedAt: Math.max(0, Math.floor(now)),
+  gold: toSafeInt(gameState?.gold, 0),
+  playerStats: {
+    atk: clampStat(gameState?.player?.atk, playerBaseStats.atk),
+    maxHp: clampStat(gameState?.player?.maxHp, playerBaseStats.hp),
+    hp: clampStat(gameState?.player?.hp, playerBaseStats.hp),
+    cooldownMs: clampStat(gameState?.player?.cooldownMs, playerBaseStats.attackCooldownMs),
+  },
+  progress: {
+    stage: toSafeInt(gameState?.progression?.difficultyLevel, 1) || 1,
+    wave: toSafeInt(gameState?.progression?.killCount, 0),
+    totalKills: toSafeInt(gameState?.progression?.killCount, 0),
+  },
+  equipment: {
+    owned: ['기사단 성장 제단'],
+    equipped: '기사단 성장 제단',
+    upgrades: {
+      attackLevel: toSafeInt(gameState?.progression?.upgrades?.attackLevel, 0),
+      healthLevel: toSafeInt(gameState?.progression?.upgrades?.healthLevel, 0),
+    },
+  },
+});
 
-  if (typeof rawSave === 'string') {
-    try {
-      return JSON.parse(rawSave);
-    } catch (_error) {
-      return null;
-    }
-  }
+const hydrateCombatState = (saveData) => {
+  const base = createCombatState();
+  const stage = Math.max(1, toSafeInt(saveData.progress?.stage, 1));
+  const killCount = toSafeInt(saveData.progress?.totalKills, 0);
+  const attackLevel = toSafeInt(saveData.equipment?.upgrades?.attackLevel, 0);
+  const healthLevel = toSafeInt(saveData.equipment?.upgrades?.healthLevel, 0);
 
-  if (typeof rawSave === 'object') {
-    return rawSave;
-  }
+  const nextMonster = spawnMonster(stage);
+  const normalizedDifficulty = nextMonsterLevel(killCount);
 
-  return null;
-};
-
-export const buildSaveState = (gameState, now = Date.now()) => {
-  const safeState = gameState ?? createCombatState();
+  const maxHp = clampStat(saveData.playerStats?.maxHp, 1);
+  const hp = clampStat(saveData.playerStats?.hp, 1, maxHp);
 
   return {
-    version: SAVE_SCHEMA_VERSION,
-    savedAt: normalizeInteger(now, Date.now()),
-    gold: normalizeInteger(safeState.gold, 0),
-    playerStats: {
-      hp: normalizeInteger(safeState.player?.hp, 1, 1),
-      maxHp: normalizeInteger(safeState.player?.maxHp, 1, 1),
-      atk: normalizeInteger(safeState.player?.atk, 1, 1),
-      cooldownMs: normalizeInteger(safeState.player?.cooldownMs, 700, 1),
-      cooldownLeftMs: normalizeInteger(
-        safeState.player?.cooldownLeftMs,
-        safeState.player?.cooldownMs ?? 700,
-        0
-      ),
+    ...base,
+    gold: toSafeInt(saveData.gold, 0),
+    player: {
+      ...base.player,
+      atk: clampStat(saveData.playerStats?.atk, playerBaseStats.atk),
+      maxHp,
+      hp,
+      cooldownMs: clampStat(saveData.playerStats?.cooldownMs, playerBaseStats.attackCooldownMs),
+      cooldownLeftMs: clampStat(saveData.playerStats?.cooldownMs, playerBaseStats.attackCooldownMs),
     },
-    progress: {
-      stage: normalizeInteger(safeState.progression?.difficultyLevel, 1, 1),
-      wave: normalizeInteger(safeState.progression?.killCount, 0, 0),
-      totalKills: normalizeInteger(safeState.progression?.killCount, 0, 0),
+    monster: {
+      ...nextMonster,
+      cooldownMs: combatRules.monsterAttackCooldownMs,
+      cooldownLeftMs: combatRules.monsterAttackCooldownMs,
+    },
+    progression: {
+      ...base.progression,
+      killCount,
+      difficultyLevel: Math.max(stage, normalizedDifficulty),
       upgrades: {
-        attackLevel: normalizeInteger(safeState.progression?.upgrades?.attackLevel, 0, 0),
-        healthLevel: normalizeInteger(safeState.progression?.upgrades?.healthLevel, 0, 0),
+        attackLevel,
+        healthLevel,
       },
-    },
-    equipment: {
-      equippedTier: 'starter',
-      ownedTiers: ['starter'],
     },
   };
 };
 
 export const restoreState = (rawSave) => {
-  const parsed = parseRawSave(rawSave);
-  const baseState = createCombatState();
-
-  if (!parsed || normalizeInteger(parsed.version, 0) !== SAVE_SCHEMA_VERSION) {
+  if (!rawSave || typeof rawSave !== 'object') {
     return {
-      state: baseState,
-      meta: {
-        version: SAVE_SCHEMA_VERSION,
-        savedAt: Date.now(),
-        isValid: false,
-      },
+      state: createCombatState(),
+      meta: { isFallback: true, reason: 'invalid-save-object', savedAt: Date.now() },
     };
   }
 
-  const playerStats = parsed.playerStats ?? {};
-  const progress = parsed.progress ?? {};
-  const upgrades = progress.upgrades ?? {};
-
-  const restored = createCombatState();
-  restored.gold = normalizeInteger(parsed.gold, baseState.gold, 0);
-  restored.player = {
-    ...restored.player,
-    hp: normalizeInteger(playerStats.hp, baseState.player.hp, 1),
-    maxHp: normalizeInteger(playerStats.maxHp, baseState.player.maxHp, 1),
-    atk: normalizeInteger(playerStats.atk, baseState.player.atk, 1),
-    cooldownMs: normalizeInteger(playerStats.cooldownMs, baseState.player.cooldownMs, 1),
-    cooldownLeftMs: normalizeInteger(
-      playerStats.cooldownLeftMs,
-      baseState.player.cooldownLeftMs,
-      0
-    ),
-  };
-
-  restored.progression = {
-    ...restored.progression,
-    killCount: normalizeInteger(progress.totalKills, baseState.progression.killCount, 0),
-    difficultyLevel: normalizeInteger(progress.stage, baseState.progression.difficultyLevel, 1),
-    upgrades: {
-      attackLevel: normalizeInteger(upgrades.attackLevel, 0, 0),
-      healthLevel: normalizeInteger(upgrades.healthLevel, 0, 0),
+  const normalizedSave = {
+    version: toSafeInt(rawSave.version, SAVE_VERSION),
+    savedAt: Math.max(0, toSafeInt(rawSave.savedAt, Date.now())),
+    gold: toSafeInt(rawSave.gold, 0),
+    playerStats: {
+      atk: clampStat(rawSave.playerStats?.atk, playerBaseStats.atk),
+      maxHp: clampStat(rawSave.playerStats?.maxHp, playerBaseStats.hp),
+      hp: clampStat(rawSave.playerStats?.hp, playerBaseStats.hp),
+      cooldownMs: clampStat(rawSave.playerStats?.cooldownMs, playerBaseStats.attackCooldownMs),
+    },
+    progress: {
+      stage: Math.max(1, toSafeInt(rawSave.progress?.stage, 1)),
+      wave: toSafeInt(rawSave.progress?.wave, 0),
+      totalKills: toSafeInt(rawSave.progress?.totalKills, rawSave.progress?.wave ?? 0),
+    },
+    equipment: {
+      owned: Array.isArray(rawSave.equipment?.owned) ? rawSave.equipment.owned : ['기사단 성장 제단'],
+      equipped: rawSave.equipment?.equipped ?? '기사단 성장 제단',
+      upgrades: {
+        attackLevel: toSafeInt(rawSave.equipment?.upgrades?.attackLevel, 0),
+        healthLevel: toSafeInt(rawSave.equipment?.upgrades?.healthLevel, 0),
+      },
     },
   };
 
-  const restoredMonster = spawnMonster(restored.progression.difficultyLevel);
-  restored.monster = {
-    ...restoredMonster,
-    cooldownMs: combatRules.monsterAttackCooldownMs,
-    cooldownLeftMs: combatRules.monsterAttackCooldownMs,
-  };
-
-  const safeSavedAt = normalizeInteger(parsed.savedAt, Date.now(), 0);
-
   return {
-    state: restored,
+    state: hydrateCombatState(normalizedSave),
     meta: {
-      version: SAVE_SCHEMA_VERSION,
-      savedAt: safeSavedAt,
-      isValid: true,
+      isFallback: false,
+      reason: null,
+      savedAt: normalizedSave.savedAt,
+      version: normalizedSave.version,
     },
   };
 };
