@@ -1,3 +1,5 @@
+import { getEquipmentBonuses } from './equipment.js';
+
 const UPGRADE_TYPES = {
   ATTACK: 'attack',
   HEALTH: 'health',
@@ -106,7 +108,6 @@ export const applyUpgrade = (state, type) => {
     return state;
   }
 
-  const nextPlayer = { ...state.player };
   const nextProgression = {
     ...state.progression,
     upgrades: {
@@ -116,22 +117,65 @@ export const applyUpgrade = (state, type) => {
   };
 
   if (type === UPGRADE_TYPES.ATTACK) {
-    nextPlayer.atk = Math.max(nextPlayer.atk + 1, Math.floor(nextPlayer.atk * config.statMultiplier));
     nextProgression.upgrades.attackLevel += 1;
   }
 
   if (type === UPGRADE_TYPES.HEALTH) {
-    const upgradedMaxHp = Math.max(nextPlayer.maxHp + 1, Math.floor(nextPlayer.maxHp * config.statMultiplier));
-    const healAmount = upgradedMaxHp - nextPlayer.maxHp;
-    nextPlayer.maxHp = upgradedMaxHp;
-    nextPlayer.hp = Math.min(upgradedMaxHp, nextPlayer.hp + healAmount);
     nextProgression.upgrades.healthLevel += 1;
   }
 
-  return {
+  return applyPlayerStatSnapshot({
     ...state,
     gold: state.gold - cost,
-    player: nextPlayer,
     progression: nextProgression,
+  });
+};
+
+const getGrowthMultiplier = (type, level) => {
+  const config = getUpgradeConfig(type);
+  return config ? config.statMultiplier ** clampLevel(level) : 1;
+};
+
+export const calculatePlayerStats = (state) => {
+  const baseStats = state?.player?.baseStats ?? {
+    atk: state?.player?.atk ?? 0,
+    maxHp: state?.player?.maxHp ?? 0,
+    cooldownMs: state?.player?.cooldownMs ?? 1000,
+  };
+  const upgrades = state?.progression?.upgrades ?? {};
+
+  const growthAtk = Math.max(1, Math.floor(baseStats.atk * getGrowthMultiplier(UPGRADE_TYPES.ATTACK, upgrades.attackLevel ?? 0)));
+  const growthHp = Math.max(1, Math.floor(baseStats.maxHp * getGrowthMultiplier(UPGRADE_TYPES.HEALTH, upgrades.healthLevel ?? 0)));
+  const equipBonus = getEquipmentBonuses(state?.player?.equipmentSlots);
+
+  return {
+    atk: growthAtk + equipBonus.atk,
+    maxHp: growthHp + equipBonus.maxHp,
+    cooldownMs: Math.max(1, Math.floor(baseStats.cooldownMs ?? 1000)),
+    baseStats,
+    equipBonus,
+  };
+};
+
+export const applyPlayerStatSnapshot = (state) => {
+  if (!state?.player) {
+    return state;
+  }
+
+  const calculated = calculatePlayerStats(state);
+  const previousMaxHp = Math.max(1, state.player.maxHp ?? calculated.maxHp);
+  const hpRatio = Math.min(1, Math.max(0, (state.player.hp ?? previousMaxHp) / previousMaxHp));
+
+  return {
+    ...state,
+    player: {
+      ...state.player,
+      atk: calculated.atk,
+      maxHp: calculated.maxHp,
+      hp: Math.max(1, Math.floor(calculated.maxHp * hpRatio)),
+      cooldownMs: calculated.cooldownMs,
+      baseStats: calculated.baseStats,
+      equipmentBonus: calculated.equipBonus,
+    },
   };
 };

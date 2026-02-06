@@ -7,5 +7,9 @@
   { "id": "bat-wing", "name": "박쥐 날개", "type": "material", "rarity": "common", "value": 6 },
   { "id": "bone-fragment", "name": "뼛조각", "type": "material", "rarity": "common", "value": 8 },
   { "id": "cult-robe", "name": "의식 로브 조각", "type": "material", "rarity": "uncommon", "value": 12 },
-  { "id": "ancient-rune", "name": "고대 룬 파편", "type": "material", "rarity": "epic", "value": 24 }
+  { "id": "ancient-rune", "name": "고대 룬 파편", "type": "material", "rarity": "epic", "value": 24 },
+
+  { "id": "template-weapon-common", "name": "훈련용 검", "type": "equipment", "slot": "weapon", "rarity": "Common", "baseStats": { "atk": 3, "hp": 0 }, "value": 12 },
+  { "id": "template-armor-rare", "name": "경비대 흉갑", "type": "equipment", "slot": "armor", "rarity": "Rare", "baseStats": { "atk": 0, "hp": 18 }, "value": 22 },
+  { "id": "template-ring-epic", "name": "마력 인장", "type": "equipment", "slot": "ring", "rarity": "Epic", "baseStats": { "atk": 2, "hp": 8 }, "value": 35 }
 ]
