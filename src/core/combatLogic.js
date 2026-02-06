@@ -1,4 +1,6 @@
 import { combatRules, growthRules, playerBaseStats } from '../design/balance.js';
+import { compareEquipmentDelta, createEmptyEquipmentSlots, createShopEquipment, EquipmentSlot, normalizeEquipmentItem } from './equipment.js';
+import { applyPlayerStatSnapshot } from './progression.js';
 import { getDefaultZone, getUnlockedZones, resolveZone, rollDropTable, selectMonsterForZone } from '../data/contentData.js';
 
 export const MAX_COMBAT_LOGS = 200;
@@ -100,12 +102,21 @@ export const createCombatState = (contentData) => {
       atk: playerBaseStats.atk,
       cooldownMs: playerBaseStats.attackCooldownMs,
       cooldownLeftMs: playerBaseStats.attackCooldownMs,
+      baseStats: {
+        atk: playerBaseStats.atk,
+        maxHp: playerBaseStats.hp,
+        cooldownMs: playerBaseStats.attackCooldownMs,
+      },
+      equipmentSlots: createEmptyEquipmentSlots(),
+      equipmentBonus: { atk: 0, maxHp: 0 },
     },
     monster: initialMonster,
     gold: 0,
     progression: initialProgression,
     inventory: {
       materials: {},
+      equipment: [],
+      shopOffer: createShopEquipment(1),
       lastDrops: [],
     },
     combat: {
@@ -119,7 +130,7 @@ export const createCombatState = (contentData) => {
     },
   };
 
-  return pushCombatEvents(initialState, [
+  return pushCombatEvents(applyPlayerStatSnapshot(initialState), [
     createCombatEvent({
       elapsedMs: 0,
       type: CombatEventType.AUTO_BATTLE_START,
@@ -200,11 +211,9 @@ const resolveKill = (state, contentData) => {
     },
     inventory: {
       materials: mergeDropsToInventory(state.inventory?.materials, drops),
+      equipment: state.inventory?.equipment ?? [],
+      shopOffer: createShopEquipment(updatedDifficulty),
       lastDrops: drops,
-    },
-    player: {
-      ...state.player,
-      hp: Math.min(state.player.maxHp, state.player.hp + 8),
     },
     combat: {
       ...state.combat,
@@ -212,19 +221,27 @@ const resolveKill = (state, contentData) => {
     },
   };
 
+  const healedState = applyPlayerStatSnapshot({
+    ...baseState,
+    player: {
+      ...baseState.player,
+      hp: Math.min(baseState.player.maxHp, baseState.player.hp + 8),
+    },
+  });
+
   const events = [
     createCombatEvent({
-      elapsedMs: baseState.combat.elapsedMs,
+      elapsedMs: healedState.combat.elapsedMs,
       type: CombatEventType.MONSTER_DEFEATED,
       message: `${state.monster.name} 처치`,
     }),
     createCombatEvent({
-      elapsedMs: baseState.combat.elapsedMs,
+      elapsedMs: healedState.combat.elapsedMs,
       type: CombatEventType.GOLD_GAINED,
       message: `보상 획득 +${state.monster.goldReward}G`,
     }),
     createCombatEvent({
-      elapsedMs: baseState.combat.elapsedMs,
+      elapsedMs: healedState.combat.elapsedMs,
       type: CombatEventType.LOOT_GAINED,
       message: `재료 획득: ${dropMessage}`,
       payload: { drops },
@@ -234,14 +251,14 @@ const resolveKill = (state, contentData) => {
   newlyUnlocked.forEach((zoneId) => {
     const zone = resolveZone(contentData, zoneId);
     events.push(createCombatEvent({
-      elapsedMs: baseState.combat.elapsedMs,
+      elapsedMs: healedState.combat.elapsedMs,
       type: CombatEventType.ZONE_UNLOCKED,
       message: `${zone?.name ?? zoneId} 지역 해금`,
       payload: { zoneId },
     }));
   });
 
-  return spawnNextMonster(pushCombatEvents(baseState, events), contentData);
+  return spawnNextMonster(pushCombatEvents(healedState, events), contentData);
 };
 
 const resolvePlayerDefeat = (state) => pushCombatEvents({
@@ -324,6 +341,102 @@ const executeCombatTick = (state, contentData) => {
   }
 
   return nextState;
+};
+
+
+export const equipItemFromInventory = (state, itemId) => {
+  const items = state?.inventory?.equipment ?? [];
+  const index = items.findIndex((item) => item?.id === itemId);
+  if (index < 0) {
+    return state;
+  }
+
+  const candidate = normalizeEquipmentItem(items[index]);
+  if (!candidate) {
+    return state;
+  }
+
+  const current = normalizeEquipmentItem(state.player?.equipmentSlots?.[candidate.slot]);
+  const nextItems = [...items];
+  nextItems.splice(index, 1);
+  if (current) {
+    nextItems.push(current);
+  }
+
+  const nextState = applyPlayerStatSnapshot({
+    ...state,
+    player: {
+      ...state.player,
+      equipmentSlots: {
+        ...(state.player?.equipmentSlots ?? createEmptyEquipmentSlots()),
+        [candidate.slot]: candidate,
+      },
+    },
+    inventory: {
+      ...state.inventory,
+      equipment: nextItems,
+    },
+  });
+
+  const delta = compareEquipmentDelta(current, candidate);
+  return pushCombatEvents(nextState, [createCombatEvent({
+    elapsedMs: state.combat.elapsedMs,
+    type: CombatEventType.LOOT_GAINED,
+    message: `${candidate.name} 장착 (ATK ${delta.atk >= 0 ? '+' : ''}${delta.atk}, HP ${delta.maxHp >= 0 ? '+' : ''}${delta.maxHp})`,
+  })]);
+};
+
+export const unequipSlot = (state, slot) => {
+  if (!Object.values(EquipmentSlot).includes(slot)) {
+    return state;
+  }
+
+  const current = normalizeEquipmentItem(state.player?.equipmentSlots?.[slot]);
+  if (!current) {
+    return state;
+  }
+
+  const nextState = applyPlayerStatSnapshot({
+    ...state,
+    player: {
+      ...state.player,
+      equipmentSlots: {
+        ...(state.player?.equipmentSlots ?? createEmptyEquipmentSlots()),
+        [slot]: null,
+      },
+    },
+    inventory: {
+      ...state.inventory,
+      equipment: [...(state.inventory?.equipment ?? []), current],
+    },
+  });
+
+  return pushCombatEvents(nextState, [createCombatEvent({
+    elapsedMs: state.combat.elapsedMs,
+    type: CombatEventType.LOOT_GAINED,
+    message: `${current.name} 장착 해제`,
+  })]);
+};
+
+export const purchaseShopOffer = (state) => {
+  const offer = normalizeEquipmentItem(state?.inventory?.shopOffer);
+  if (!offer || state.gold < offer.value) {
+    return state;
+  }
+
+  return pushCombatEvents({
+    ...state,
+    gold: state.gold - offer.value,
+    inventory: {
+      ...state.inventory,
+      equipment: [...(state.inventory?.equipment ?? []), offer],
+      shopOffer: createShopEquipment(state.progression?.difficultyLevel ?? 1),
+    },
+  }, [createCombatEvent({
+    elapsedMs: state.combat.elapsedMs,
+    type: CombatEventType.GOLD_GAINED,
+    message: `상점 구매: ${offer.name} (${offer.value}G)`,
+  })]);
 };
 
 export const tickCombat = (state, deltaMs, contentData) => {

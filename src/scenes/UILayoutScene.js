@@ -1,4 +1,4 @@
-import { CombatEventType, changeZone, createCombatState, tickCombat } from '../core/combatLogic.js';
+import { CombatEventType, changeZone, createCombatState, equipItemFromInventory, purchaseShopOffer, tickCombat, unequipSlot } from '../core/combatLogic.js';
 import { applyOfflineReward, calculateOfflineReward } from '../core/offlineReward.js';
 import { buildContentData } from '../data/contentData.js';
 import { buildSaveState, restoreState, SAVE_STORAGE_KEY } from '../core/save.js';
@@ -9,6 +9,7 @@ import {
   calcSurvivability,
   getUpgradeCost,
 } from '../core/progression.js';
+import { compareEquipmentDelta, EquipmentRarity, EquipmentSlot, rarityVisual } from '../core/equipment.js';
 import { offlineRewardBalance } from '../design/offlineBalance.js';
 
 const UI_THEME = {
@@ -52,6 +53,7 @@ export default class UILayoutScene extends Phaser.Scene {
     this.combatState = createCombatState();
     this.activeTab = '업그레이드';
     this.upgradeFeedback = '';
+    this.selectedEquipmentId = null;
     this.ui = {};
     this.isLogPanelVisible = false;
     this.isStatusPanelVisible = false;
@@ -109,6 +111,16 @@ export default class UILayoutScene extends Phaser.Scene {
       event?.preventDefault?.();
       this.toggleLogPanel();
     });
+
+    this.input.keyboard?.on('keydown-E', () => {
+      const first = this.combatState.inventory?.equipment?.[0];
+      if (first?.id) {
+        this.tryEquipItem(first.id);
+      }
+    });
+    this.input.keyboard?.on('keydown-ONE', () => this.tryUnequipSlot(EquipmentSlot.WEAPON));
+    this.input.keyboard?.on('keydown-TWO', () => this.tryUnequipSlot(EquipmentSlot.ARMOR));
+    this.input.keyboard?.on('keydown-THREE', () => this.tryUnequipSlot(EquipmentSlot.RING));
 
     this.ui.f1HandlerBound = true;
   }
@@ -441,7 +453,28 @@ export default class UILayoutScene extends Phaser.Scene {
       wordWrap: { width: bounds.w - 40, useAdvancedWrap: true },
     });
 
-    this.ui.zoneTitle = this.add.text(bounds.x + 20, bounds.y + 366, '지역 이동', {
+    this.ui.equipmentInfo = this.add.text(bounds.x + 34, bounds.y + 358, '', {
+      fontFamily: 'Arial',
+      fontSize: '12px',
+      color: '#e2e8f0',
+      lineSpacing: 4,
+      wordWrap: { width: bounds.w - 70, useAdvancedWrap: true },
+    });
+
+    this.ui.shopBuyButton = this.add
+      .rectangle(bounds.x + 34, bounds.y + 448, bounds.w - 68, 34, 0x2563eb)
+      .setOrigin(0)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerup', () => this.tryPurchaseShopOffer());
+
+    this.ui.shopBuyText = this.add.text(bounds.x + 44, bounds.y + 456, '', {
+      fontFamily: 'Arial',
+      fontSize: '13px',
+      color: '#dbeafe',
+      fontStyle: 'bold',
+    });
+
+    this.ui.zoneTitle = this.add.text(bounds.x + 20, bounds.y + 490, '지역 이동', {
       fontFamily: 'Arial',
       fontSize: '15px',
       color: '#93c5fd',
@@ -452,11 +485,11 @@ export default class UILayoutScene extends Phaser.Scene {
     this.ui.zoneButtons = unlocked.map((zoneId, index) => {
       const zone = this.contentData.zonesById[zoneId];
       const button = this.add
-        .rectangle(bounds.x + 34, bounds.y + 394 + index * 34, bounds.w - 68, 28, 0x1d4ed8)
+        .rectangle(bounds.x + 34, bounds.y + 520 + index * 32, bounds.w - 68, 28, 0x1d4ed8)
         .setOrigin(0)
         .setInteractive({ useHandCursor: true })
         .on('pointerup', () => this.tryChangeZone(zoneId));
-      const text = this.add.text(bounds.x + 44, bounds.y + 400 + index * 34, zone?.name ?? zoneId, {
+      const text = this.add.text(bounds.x + 44, bounds.y + 525 + index * 32, zone?.name ?? zoneId, {
         fontFamily: 'Arial',
         fontSize: '13px',
         color: '#dbeafe',
@@ -839,6 +872,73 @@ export default class UILayoutScene extends Phaser.Scene {
   }
 
 
+  getSlotLabel(slot) {
+    if (slot === EquipmentSlot.WEAPON) return '무기';
+    if (slot === EquipmentSlot.ARMOR) return '갑옷';
+    if (slot === EquipmentSlot.RING) return '반지';
+    return slot;
+  }
+
+  getRarityVisual(rarity) {
+    return rarityVisual[rarity] ?? rarityVisual[EquipmentRarity.COMMON];
+  }
+
+  formatDelta(value, suffix = '') {
+    if (value === 0) {
+      return `→ 0${suffix}`;
+    }
+    const arrow = value > 0 ? '↑' : '↓';
+    const sign = value > 0 ? '+' : '';
+    return `${arrow} ${sign}${value}${suffix}`;
+  }
+
+  tryPurchaseShopOffer() {
+    const nextState = purchaseShopOffer(this.combatState);
+    if (nextState === this.combatState) {
+      this.upgradeFeedback = '상점 구매 실패: 골드 또는 상품 상태를 확인하세요.';
+      this.ui.slotHint.setColor('#f87171');
+      this.refreshUI();
+      return;
+    }
+
+    this.combatState = nextState;
+    this.upgradeFeedback = '상점에서 장비를 구매했습니다.';
+    this.ui.slotHint.setColor('#86efac');
+    this.refreshUI();
+  }
+
+  tryEquipItem(itemId) {
+    const nextState = equipItemFromInventory(this.combatState, itemId);
+    if (nextState === this.combatState) {
+      this.upgradeFeedback = '장착 실패: 인벤토리에서 아이템을 찾을 수 없습니다.';
+      this.ui.slotHint.setColor('#f87171');
+      this.refreshUI();
+      return;
+    }
+
+    this.combatState = nextState;
+    this.selectedEquipmentId = itemId;
+    this.upgradeFeedback = '장비를 장착했습니다.';
+    this.ui.slotHint.setColor('#86efac');
+    this.refreshUI();
+  }
+
+  tryUnequipSlot(slot) {
+    const nextState = unequipSlot(this.combatState, slot);
+    if (nextState === this.combatState) {
+      this.upgradeFeedback = '해제할 장비가 없습니다.';
+      this.ui.slotHint.setColor('#f87171');
+      this.refreshUI();
+      return;
+    }
+
+    this.combatState = nextState;
+    this.upgradeFeedback = `${this.getSlotLabel(slot)} 장비를 해제했습니다.`;
+    this.ui.slotHint.setColor('#86efac');
+    this.refreshUI();
+  }
+
+
   tryChangeZone(zoneId) {
     this.combatState = changeZone(this.combatState, zoneId, this.contentData);
     this.refreshUI();
@@ -894,7 +994,7 @@ export default class UILayoutScene extends Phaser.Scene {
     this.updateHpBar('player', combatSnapshot.playerHpRatio, combatSnapshot.playerHpPercent);
     this.updateHpBar('monster', combatSnapshot.monsterHpRatio, combatSnapshot.monsterHpPercent);
 
-    this.ui.playHint?.setText(`최근 전투 요약: ${combat.lastEvent}`);
+    this.ui.playHint?.setText(`최근 전투 요약: ${combat.lastEvent} | 단축키 E: 인벤 첫 장비 장착, 1/2/3: 슬롯 해제`);
     this.ui.offlineRewardText?.setText(this.offlineRewardSummary?.message || '');
 
     const attackLevel = progression.upgrades.attackLevel;
@@ -905,19 +1005,52 @@ export default class UILayoutScene extends Phaser.Scene {
     this.ui.slotInfo?.setText([
       '슬롯 이름: 기사단 성장 제단',
       `공격력 강화 Lv.${attackLevel} | 체력 강화 Lv.${healthLevel}`,
-      `현재 공격력 ${player.atk} | 현재 최대HP ${player.maxHp}`,
+      `현재 공격력 ${player.atk} (장비 +${player.equipmentBonus?.atk ?? 0})`,
+      `현재 최대HP ${player.maxHp} (장비 +${player.equipmentBonus?.maxHp ?? 0})`,
       `DPS ${dps} | 생존 ${survivability}초`,
-      `해금 지역: ${(progression.unlockedZoneIds ?? []).length}개`,
+    ]);
+
+    const slotItems = this.combatState.player?.equipmentSlots ?? {};
+    const inventoryEquip = this.combatState.inventory?.equipment ?? [];
+    const shopOffer = this.combatState.inventory?.shopOffer;
+    const slotLines = Object.values(EquipmentSlot).map((slot) => {
+      const item = slotItems[slot];
+      if (!item) {
+        return `- ${this.getSlotLabel(slot)}: (비어 있음) [해제: ${this.getSlotLabel(slot)}]`;
+      }
+      const visual = this.getRarityVisual(item.rarity);
+      return `- ${this.getSlotLabel(slot)}: ${visual.icon} ${item.name} (${item.baseStats.atk}/${item.baseStats.hp}) [해제:${slot}]`;
+    });
+
+    const candidate = inventoryEquip[0] ?? null;
+    const compareTarget = candidate ? (slotItems[candidate.slot] ?? null) : null;
+    const delta = candidate ? compareEquipmentDelta(compareTarget, candidate) : { atk: 0, maxHp: 0 };
+    const shopText = shopOffer
+      ? `${this.getRarityVisual(shopOffer.rarity).icon} ${shopOffer.name} | 가격 ${shopOffer.value}G | 기본 ATK ${shopOffer.baseStats.atk}, HP ${shopOffer.baseStats.hp}`
+      : '상점 상품 없음';
+
+    this.ui.equipmentInfo?.setText([
+      '[장비 슬롯]',
+      ...slotLines,
+      '',
+      `[인벤토리 장비 ${inventoryEquip.length}개]`,
+      candidate
+        ? `장착 후보: ${candidate.name} → 예상 변화 ATK ${this.formatDelta(delta.atk)}, HP ${this.formatDelta(delta.maxHp)}`
+        : '장착 후보 없음 (상점에서 먼저 구매)',
+      '※ 장착: 인벤토리 첫 아이템 자동 장착',
+      `※ 상점: ${shopText}`,
     ]);
     this.ui.attackUpgradeText?.setText(`공격력 강화 (비용 ${attackCost}G)`);
     this.ui.healthUpgradeText?.setText(`체력 강화 (비용 ${healthCost}G)`);
+    this.ui.shopBuyText?.setText(this.combatState.inventory?.shopOffer ? `상점 구매: ${this.combatState.inventory.shopOffer.name} (${this.combatState.inventory.shopOffer.value}G)` : '상점 상품 없음');
+    this.ui.shopBuyButton?.setFillStyle(this.combatState.inventory?.shopOffer && gold >= (this.combatState.inventory.shopOffer.value ?? 0) ? 0x2563eb : 0x334155);
     if (!this.upgradeFeedback) {
       this.ui.slotHint?.setColor('#fef08a');
     }
     this.ui.slotHint?.setText(this.upgradeFeedback || '강화 버튼으로 전투 체감을 올려보세요.');
 
     const tabMessage = {
-      업그레이드: '업그레이드 탭: 영웅 슬롯/장비 확장 영역. 플레이 화면은 핵심 진행 정보만 유지됩니다.',
+      업그레이드: '업그레이드 탭: 장비/강화/상점 연동 완료. 장착/해제/비교가 가능합니다.',
       퀘스트: '퀘스트 탭 플레이스홀더: 일일/주간 퀘스트 목록이 들어올 영역입니다. (미개발 영역 배치 확정)',
       상점: '상점 탭 플레이스홀더: 재화 소비형 패키지/소모품 목록이 들어올 영역입니다. (미개발 영역 배치 확정)',
     };
