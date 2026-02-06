@@ -1,5 +1,4 @@
 import { nextMonsterLevel } from './combatLogic.js';
-import { spawnMonster } from './spawnMonster.js';
 import { offlineRewardBalance } from '../design/offlineBalance.js';
 import { combatRules } from '../design/balance.js';
 
@@ -7,9 +6,7 @@ const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
 const getStageMultiplier = (difficultyLevel, stageBrackets) => {
   const currentStage = Math.max(1, Math.floor(difficultyLevel || 1));
-  return (
-    stageBrackets.find((bracket) => currentStage <= bracket.maxDifficulty)?.killRateMultiplier ?? 1
-  );
+  return stageBrackets.find((bracket) => currentStage <= bracket.maxDifficulty)?.killRateMultiplier ?? 1;
 };
 
 const getPlayerDps = (state) => {
@@ -18,14 +15,7 @@ const getPlayerDps = (state) => {
   return atk / (cooldownMs / 1000);
 };
 
-const getCurrentMonsterHp = (state) => {
-  if (state?.monster?.maxHp) {
-    return Math.max(1, state.monster.maxHp);
-  }
-
-  const stage = Math.max(1, Math.floor(state?.progression?.difficultyLevel ?? 1));
-  return Math.max(1, spawnMonster(stage).maxHp);
-};
+const getCurrentMonsterHp = (state) => Math.max(1, state?.monster?.maxHp ?? 100);
 
 export const calculateOfflineReward = (state, offlineSec, balanceConfig = offlineRewardBalance) => {
   const safeOfflineSec = Math.max(0, Number(offlineSec) || 0);
@@ -33,51 +23,29 @@ export const calculateOfflineReward = (state, offlineSec, balanceConfig = offlin
   const offlineSecApplied = Math.floor(clamp(safeOfflineSec, 0, capSec));
 
   if (offlineSecApplied < (balanceConfig.minimumOfflineSec ?? 0)) {
-    return {
-      killsGained: 0,
-      goldGained: 0,
-      offlineSecApplied,
-    };
+    return { killsGained: 0, goldGained: 0, offlineSecApplied };
   }
 
-  const playerDps = getPlayerDps(state);
-  const monsterHp = getCurrentMonsterHp(state);
-  const baseKillsPerSec = playerDps / monsterHp;
-  const stageMultiplier = getStageMultiplier(
-    state?.progression?.difficultyLevel,
-    balanceConfig.stageBrackets ?? offlineRewardBalance.stageBrackets
-  );
-
-  const effectiveKillsPerSec =
-    baseKillsPerSec *
-    (balanceConfig.offlineEfficiency ?? offlineRewardBalance.offlineEfficiency) *
-    stageMultiplier;
+  const baseKillsPerSec = getPlayerDps(state) / getCurrentMonsterHp(state);
+  const stageMultiplier = getStageMultiplier(state?.progression?.difficultyLevel, balanceConfig.stageBrackets ?? offlineRewardBalance.stageBrackets);
+  const effectiveKillsPerSec = baseKillsPerSec * (balanceConfig.offlineEfficiency ?? offlineRewardBalance.offlineEfficiency) * stageMultiplier;
 
   const killsGained = Math.max(0, Math.floor(offlineSecApplied * effectiveKillsPerSec));
-  const fallbackGoldReward = spawnMonster(Math.max(1, Math.floor(state?.progression?.difficultyLevel ?? 1))).goldReward;
-  const baseGoldPerKill = Math.max(0, state?.monster?.goldReward ?? fallbackGoldReward);
-  const goldMultiplier = balanceConfig.goldEfficiency ?? offlineRewardBalance.goldEfficiency;
-  const goldGained = Math.max(0, Math.floor(killsGained * baseGoldPerKill * goldMultiplier));
+  const baseGoldPerKill = Math.max(0, state?.monster?.goldReward ?? 1);
+  const goldGained = Math.max(0, Math.floor(killsGained * baseGoldPerKill * (balanceConfig.goldEfficiency ?? offlineRewardBalance.goldEfficiency)));
 
-  return {
-    killsGained,
-    goldGained,
-    offlineSecApplied,
-  };
+  return { killsGained, goldGained, offlineSecApplied };
 };
 
 export const applyOfflineReward = (state, reward) => {
   const killsToAdd = Math.max(0, Math.floor(reward?.killsGained ?? 0));
   const goldToAdd = Math.max(0, Math.floor(reward?.goldGained ?? 0));
-
   if (killsToAdd === 0 && goldToAdd === 0) {
     return state;
   }
 
-  const currentKills = Math.max(0, Math.floor(state?.progression?.killCount ?? 0));
-  const nextKillCount = currentKills + killsToAdd;
+  const nextKillCount = Math.max(0, Math.floor(state?.progression?.killCount ?? 0)) + killsToAdd;
   const nextDifficulty = nextMonsterLevel(nextKillCount);
-  const nextMonster = spawnMonster(nextDifficulty);
 
   return {
     ...state,
@@ -88,7 +56,7 @@ export const applyOfflineReward = (state, reward) => {
       cooldownLeftMs: state.player.cooldownMs,
     },
     monster: {
-      ...nextMonster,
+      ...state.monster,
       cooldownMs: combatRules.monsterAttackCooldownMs,
       cooldownLeftMs: combatRules.monsterAttackCooldownMs,
     },

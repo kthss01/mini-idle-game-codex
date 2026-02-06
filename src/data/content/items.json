@@ -1,0 +1,11 @@
+[
+  { "id": "slime-gel", "name": "슬라임 젤", "type": "material", "rarity": "common", "value": 4 },
+  { "id": "soft-core", "name": "말랑 코어", "type": "material", "rarity": "rare", "value": 10 },
+  { "id": "wolf-pelt", "name": "들개 가죽", "type": "material", "rarity": "common", "value": 5 },
+  { "id": "goblin-fang", "name": "고블린 송곳니", "type": "material", "rarity": "common", "value": 7 },
+  { "id": "cracked-dagger", "name": "금 간 단검", "type": "material", "rarity": "rare", "value": 15 },
+  { "id": "bat-wing", "name": "박쥐 날개", "type": "material", "rarity": "common", "value": 6 },
+  { "id": "bone-fragment", "name": "뼛조각", "type": "material", "rarity": "common", "value": 8 },
+  { "id": "cult-robe", "name": "의식 로브 조각", "type": "material", "rarity": "uncommon", "value": 12 },
+  { "id": "ancient-rune", "name": "고대 룬 파편", "type": "material", "rarity": "epic", "value": 24 }
+]

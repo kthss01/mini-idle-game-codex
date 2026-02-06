@@ -1,0 +1,66 @@
+[
+  {
+    "id": "slime",
+    "name": "초원 슬라임",
+    "baseHp": 54,
+    "baseAtk": 5,
+    "goldReward": 8,
+    "dropTable": [
+      { "itemId": "slime-gel", "chance": 0.65, "min": 1, "max": 2 },
+      { "itemId": "soft-core", "chance": 0.12, "min": 1, "max": 1 }
+    ]
+  },
+  {
+    "id": "wolf",
+    "name": "들개",
+    "baseHp": 62,
+    "baseAtk": 6,
+    "goldReward": 9,
+    "dropTable": [
+      { "itemId": "wolf-pelt", "chance": 0.55, "min": 1, "max": 2 }
+    ]
+  },
+  {
+    "id": "goblin",
+    "name": "동굴 고블린",
+    "baseHp": 84,
+    "baseAtk": 9,
+    "goldReward": 13,
+    "dropTable": [
+      { "itemId": "goblin-fang", "chance": 0.6, "min": 1, "max": 2 },
+      { "itemId": "cracked-dagger", "chance": 0.1, "min": 1, "max": 1 }
+    ]
+  },
+  {
+    "id": "bat",
+    "name": "동굴 박쥐",
+    "baseHp": 76,
+    "baseAtk": 10,
+    "goldReward": 12,
+    "dropTable": [
+      { "itemId": "bat-wing", "chance": 0.58, "min": 1, "max": 2 }
+    ]
+  },
+  {
+    "id": "skeleton",
+    "name": "망자 스켈레톤",
+    "baseHp": 122,
+    "baseAtk": 14,
+    "goldReward": 19,
+    "dropTable": [
+      { "itemId": "bone-fragment", "chance": 0.62, "min": 1, "max": 3 },
+      { "itemId": "ancient-rune", "chance": 0.08, "min": 1, "max": 1 }
+    ]
+  },
+  {
+    "id": "cultist",
+    "name": "암흑 사도",
+    "baseHp": 136,
+    "baseAtk": 15,
+    "goldReward": 21,
+    "dropTable": [
+      { "itemId": "cult-robe", "chance": 0.4, "min": 1, "max": 1 },
+      { "itemId": "ancient-rune", "chance": 0.14, "min": 1, "max": 1 }
+    ]
+  }
+]

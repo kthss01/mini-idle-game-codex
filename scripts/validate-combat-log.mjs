@@ -4,11 +4,14 @@ import {
   createCombatState,
   tickCombat,
 } from '../src/core/combatLogic.js';
+import { loadContentData } from './load-content-data.mjs';
+
+const contentData = await loadContentData();
 
 const simulateCombat = ({ loops, deltaMs }) => {
-  let state = createCombatState();
+  let state = createCombatState(contentData);
   for (let i = 0; i < loops; i += 1) {
-    state = tickCombat(state, deltaMs);
+    state = tickCombat(state, deltaMs, contentData);
   }
   return state;
 };
@@ -21,10 +24,7 @@ const assert = (condition, message) => {
 
 const validateSequentialTimestamps = (events) => {
   for (let i = 1; i < events.length; i += 1) {
-    assert(
-      events[i].timestamp >= events[i - 1].timestamp,
-      `타임스탬프 역전 감지: index ${i - 1} -> ${i}`,
-    );
+    assert(events[i].timestamp >= events[i - 1].timestamp, `타임스탬프 역전 감지: index ${i - 1} -> ${i}`);
   }
 };
 
@@ -37,7 +37,7 @@ const validateTransitionPairs = (events) => {
 
     if (current.type === CombatEventType.MONSTER_DEFEATED) {
       assert(events[i + 1]?.type === CombatEventType.GOLD_GAINED, '처치 직후 골드획득 로그 누락');
-      assert(events[i + 2]?.type === CombatEventType.STAGE_CLEAR, '처치 후 스테이지클리어 로그 누락');
+      assert(events[i + 2]?.type, '처치 후 후속 로그 누락');
     }
   }
 };

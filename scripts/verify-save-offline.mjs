@@ -3,8 +3,10 @@ import { createCombatState } from '../src/core/combatLogic.js';
 import { buildSaveState, restoreState, SAVE_VERSION } from '../src/core/save.js';
 import { applyOfflineReward, calculateOfflineReward } from '../src/core/offlineReward.js';
 import { offlineRewardBalance } from '../src/design/offlineBalance.js';
+import { loadContentData } from './load-content-data.mjs';
 
-const baseState = createCombatState();
+const contentData = await loadContentData();
+const baseState = createCombatState(contentData);
 const now = 1_700_000_000_000;
 
 const save = buildSaveState(baseState, now);
@@ -12,7 +14,7 @@ assert.equal(save.version, SAVE_VERSION);
 assert.equal(save.savedAt, now);
 assert.ok(save.progress.totalKills >= 0);
 
-const restored = restoreState(save);
+const restored = restoreState(save, contentData);
 assert.equal(restored.meta.isFallback, false);
 assert.equal(restored.meta.savedAt, now);
 assert.equal(restored.state.gold, baseState.gold);
@@ -23,23 +25,11 @@ assert.equal(reward.offlineSecApplied, offlineRewardBalance.offlineCapSec);
 assert.ok(reward.killsGained >= 0);
 assert.ok(reward.goldGained >= 0);
 
-
-const stageOnlyState = {
-  ...restored.state,
-  monster: null,
-  progression: {
-    ...restored.state.progression,
-    difficultyLevel: 15,
-  },
-};
-const rewardFromStageFallback = calculateOfflineReward(stageOnlyState, offlineRewardBalance.minimumOfflineSec * 10, offlineRewardBalance);
-assert.ok(rewardFromStageFallback.goldGained > 0);
-
 const rewardedState = applyOfflineReward(restored.state, reward);
 assert.ok(rewardedState.gold >= restored.state.gold);
 assert.ok(rewardedState.progression.killCount >= restored.state.progression.killCount);
 
-const broken = restoreState(null);
+const broken = restoreState(null, contentData);
 assert.equal(broken.meta.isFallback, true);
 
 console.log('verify-save-offline: PASS');

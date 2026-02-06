@@ -1,0 +1,20 @@
+[
+  {
+    "id": "meadow",
+    "name": "초원",
+    "unlockStage": 1,
+    "monsterPool": ["slime", "wolf"]
+  },
+  {
+    "id": "cave",
+    "name": "동굴",
+    "unlockStage": 5,
+    "monsterPool": ["goblin", "bat"]
+  },
+  {
+    "id": "ruins",
+    "name": "폐성",
+    "unlockStage": 10,
+    "monsterPool": ["skeleton", "cultist"]
+  }
+]
