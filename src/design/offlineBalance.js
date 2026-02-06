@@ -9,3 +9,6 @@ export const offlineRewardBalance = Object.freeze({
     { maxDifficulty: Infinity, killRateMultiplier: 0.8 },
   ],
 });
+
+// 하위 호환용 별칭: 기존 코드에서 offlineRewardConfig 이름을 참조하는 경우를 지원합니다.
+export const offlineRewardConfig = offlineRewardBalance;
