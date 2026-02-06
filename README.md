@@ -68,6 +68,8 @@ node scripts/verify-save-offline.mjs
 원격 브랜치가 없다면 먼저 `git remote add origin <REMOTE_URL>` 후 `git fetch origin` 을 실행하거나,
 로컬에 존재하는 브랜치 이름을 인자로 전달합니다.
 
+충돌이 감지되면 `CONFLICT` 상세 로그와 충돌 가능 파일 목록을 함께 출력합니다.
+
 ## 문서 운영 원칙
 
 - 개발 작업 시 관련 문서 업데이트를 함께 진행합니다.
