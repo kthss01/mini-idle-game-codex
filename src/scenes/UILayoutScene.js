@@ -1,8 +1,6 @@
 import { CombatEventType, createCombatState, tickCombat } from '../core/combatLogic.js';
 import { applyOfflineReward, calculateOfflineReward } from '../core/offlineReward.js';
-import { SAVE_KEY, buildSaveState, restoreState } from '../core/save.js';
-import { spawnMonster } from '../core/spawnMonster.js';
-import { offlineRewardConfig } from '../design/offlineBalance.js';
+import { buildSaveState, restoreState, SAVE_STORAGE_KEY } from '../core/save.js';
 import {
   ProgressionUpgradeType,
   applyUpgrade,
@@ -10,8 +8,6 @@ import {
   calcSurvivability,
   getUpgradeCost,
 } from '../core/progression.js';
-import { applyOfflineReward, calculateOfflineReward } from '../core/offlineReward.js';
-import { buildSaveState, restoreState, SAVE_STORAGE_KEY } from '../core/save.js';
 
 const UI_THEME = {
   panelStroke: 0x1f2937,
@@ -60,8 +56,6 @@ export default class UILayoutScene extends Phaser.Scene {
     this.buildLayout();
     this.bindResize();
     this.bindInputs();
-    this.bindPersistenceLifecycle();
-    this.startAutoSave();
     this.refreshUI();
     this.showOfflineRewardNotice();
     this.setupPersistence();
@@ -71,127 +65,6 @@ export default class UILayoutScene extends Phaser.Scene {
     this.combatState = tickCombat(this.combatState, delta);
     this.refreshUI();
     this.animateCombatUnits();
-  }
-
-
-  shutdown() {
-    this.stopAutoSave();
-    this.unbindPersistenceLifecycle();
-    this.persistState();
-  }
-
-  startAutoSave() {
-    this.stopAutoSave();
-    this.autoSaveTimer = window.setInterval(() => this.persistState(), 5000);
-  }
-
-  stopAutoSave() {
-    if (this.autoSaveTimer) {
-      window.clearInterval(this.autoSaveTimer);
-      this.autoSaveTimer = null;
-    }
-  }
-
-  bindPersistenceLifecycle() {
-    const persist = () => this.persistState();
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        persist();
-      }
-    };
-
-    window.addEventListener('beforeunload', persist);
-    window.addEventListener('pagehide', persist);
-    document.addEventListener('visibilitychange', onVisibilityChange);
-
-    this.lifecycleHandlers = {
-      persist,
-      onVisibilityChange,
-    };
-
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.shutdown());
-    this.events.once(Phaser.Scenes.Events.DESTROY, () => this.shutdown());
-  }
-
-  unbindPersistenceLifecycle() {
-    if (!this.lifecycleHandlers) {
-      return;
-    }
-
-    window.removeEventListener('beforeunload', this.lifecycleHandlers.persist);
-    window.removeEventListener('pagehide', this.lifecycleHandlers.persist);
-    document.removeEventListener('visibilitychange', this.lifecycleHandlers.onVisibilityChange);
-    this.lifecycleHandlers = null;
-  }
-
-  persistState(now = Date.now()) {
-    try {
-      const payload = buildSaveState(this.combatState, now);
-      localStorage.setItem(SAVE_KEY, JSON.stringify(payload));
-      return true;
-    } catch (_error) {
-      return false;
-    }
-  }
-
-  loadOrCreateState(now = Date.now()) {
-    const fallback = createCombatState();
-
-    try {
-      const rawSave = localStorage.getItem(SAVE_KEY);
-      const restored = restoreState(rawSave);
-      if (!restored.isValid) {
-        return fallback;
-      }
-
-      const appliedState = this.applyRestoredState(fallback, restored);
-      const offlineSec = Math.max(0, Math.floor((now - restored.savedAt) / 1000));
-      const reward = calculateOfflineReward(appliedState, offlineSec, offlineRewardConfig);
-      this.offlineRewardNotice = reward.killsGained > 0 || reward.goldGained > 0
-        ? `오프라인 보상: ${reward.killsGained}마리 처치, ${reward.goldGained}G 획득 (${reward.offlineSecApplied}초 적용)`
-        : '';
-
-      return applyOfflineReward(appliedState, reward);
-    } catch (_error) {
-      return fallback;
-    }
-  }
-
-  applyRestoredState(fallback, restored) {
-    const monster = spawnMonster(restored.progress.difficultyLevel);
-
-    return {
-      ...fallback,
-      gold: restored.gold,
-      player: {
-        ...fallback.player,
-        atk: restored.playerStats.atk,
-        maxHp: restored.playerStats.maxHp,
-        hp: Math.min(restored.playerStats.maxHp, restored.playerStats.hp),
-        cooldownMs: restored.playerStats.cooldownMs,
-        cooldownLeftMs: restored.playerStats.cooldownLeftMs,
-      },
-      progression: {
-        ...fallback.progression,
-        killCount: restored.progress.killCount,
-        difficultyLevel: restored.progress.difficultyLevel,
-        upgrades: {
-          attackLevel: restored.progress.upgrades.attackLevel,
-          healthLevel: restored.progress.upgrades.healthLevel,
-        },
-      },
-      combat: {
-        ...fallback.combat,
-        elapsedMs: restored.progress.combat.elapsedMs,
-        tick: restored.progress.combat.tick,
-        lastEvent: '저장 데이터를 불러왔습니다.',
-      },
-      monster: {
-        ...monster,
-        cooldownMs: fallback.monster.cooldownMs,
-        cooldownLeftMs: fallback.monster.cooldownMs,
-      },
-    };
   }
 
   bindResize() {
@@ -752,7 +625,7 @@ export default class UILayoutScene extends Phaser.Scene {
     ]);
 
     this.ui.playHint?.setText(`최근 전투 요약: ${combat.lastEvent}`);
-    this.ui.offlineRewardText?.setText(this.offlineRewardNotice || '');
+    this.ui.offlineRewardText?.setText(this.offlineRewardSummary?.message || '');
 
     const attackLevel = progression.upgrades.attackLevel;
     const healthLevel = progression.upgrades.healthLevel;
