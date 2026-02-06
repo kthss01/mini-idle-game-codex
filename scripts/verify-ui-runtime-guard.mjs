@@ -17,7 +17,7 @@ const offlineImportCount = (source.match(/from '\.\.\/core\/offlineReward\.js';/
 assert(saveImportCount === 1, 'save 모듈 import가 1회만 선언되어야 함');
 assert(offlineImportCount === 1, 'offlineReward 모듈 import가 1회만 선언되어야 함');
 
-const createBlockMatch = source.match(/\bcreate\(\)\s*\{([\s\S]*?)\n\s*\}\n\n\s*loadCombatState\(/);
+const createBlockMatch = source.match(/\bcreate\(\)\s*\{([\s\S]*?)\n\s*\}\n\n\s*loadGameState\(/);
 assert(Boolean(createBlockMatch), 'create() 블록을 찾을 수 있어야 함');
 
 const createBlock = createBlockMatch?.[1] ?? '';
