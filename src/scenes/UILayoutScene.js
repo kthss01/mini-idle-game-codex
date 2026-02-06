@@ -53,7 +53,6 @@ const HP_LOW_THRESHOLD = 0.3;
 const HP_TRANSITION_MS = 200;
 const TOGGLE_BUTTON_WIDTH = 132;
 const TOGGLE_BUTTON_HEIGHT = 38;
-const TOGGLE_BUTTON_GAP = 12;
 const TOP_UI_MARGIN = 12;
 const TOP_ACTION_BUTTON_WIDTH = 84;
 const TOP_ACTION_BUTTON_HEIGHT = 34;
@@ -68,7 +67,6 @@ export default class UILayoutScene extends Phaser.Scene {
     this.selectedEquipmentId = null;
     this.ui = {};
     this.isLogPanelVisible = false;
-    this.isStatusPanelVisible = false;
     this.logScrollOffset = 0;
     this.logVisibleCount = 8;
     this.playerHpDisplayRatio = 1;
@@ -324,7 +322,6 @@ export default class UILayoutScene extends Phaser.Scene {
     this.createProgressionPanel(layout.middleRight);
     this.createBottomTabs(layout.bottom);
     this.createLogPanel(layout);
-    this.createStatusPanel(layout);
   }
 
   drawPanel(bounds, fill) {
@@ -335,7 +332,7 @@ export default class UILayoutScene extends Phaser.Scene {
   }
 
   createTopHUD(bounds) {
-    const toggleReservedWidth = (TOGGLE_BUTTON_WIDTH * 2) + TOGGLE_BUTTON_GAP + (TOP_UI_MARGIN * 2);
+    const toggleReservedWidth = TOGGLE_BUTTON_WIDTH + (TOP_UI_MARGIN * 2);
     const actionReservedWidth = (TOP_ACTION_BUTTON_WIDTH * 3) + (TOP_ACTION_BUTTON_GAP * 2) + 24;
     const slotAreaWidth = Math.max(360, bounds.w - toggleReservedWidth - actionReservedWidth);
     const slotWidth = slotAreaWidth / 3;
@@ -351,7 +348,7 @@ export default class UILayoutScene extends Phaser.Scene {
   }
 
   createTopActionButtons(bounds) {
-    const rightOffset = (TOGGLE_BUTTON_WIDTH * 2) + TOGGLE_BUTTON_GAP + (TOP_UI_MARGIN * 3);
+    const rightOffset = TOGGLE_BUTTON_WIDTH + (TOP_UI_MARGIN * 3);
     const totalWidth = (TOP_ACTION_BUTTON_WIDTH * 3) + (TOP_ACTION_BUTTON_GAP * 2);
     const startX = bounds.x + bounds.w - rightOffset - totalWidth;
     const y = bounds.y + TOP_UI_MARGIN + 2;
@@ -629,8 +626,7 @@ export default class UILayoutScene extends Phaser.Scene {
     const layout = this.getLayout();
     const y = layout.top.y + TOP_UI_MARGIN;
     const logX = layout.width - TOGGLE_BUTTON_WIDTH - TOP_UI_MARGIN;
-    const statusX = logX - TOGGLE_BUTTON_GAP - TOGGLE_BUTTON_WIDTH;
-    return { statusX, logX, y };
+    return { logX, y };
   }
 
   createLogPanel(layout) {
@@ -737,65 +733,6 @@ export default class UILayoutScene extends Phaser.Scene {
     this.ui.logPanelItems = logItems;
   }
 
-  createStatusPanel(layout) {
-    const panelW = Math.max(320, Math.floor(layout.width * 0.28));
-    const panelH = Math.max(230, Math.floor(layout.height * 0.34));
-    const panelX = layout.width - panelW - 18;
-    const panelY = layout.height - panelH - 18;
-
-    const toggleLayout = this.getTopRightToggleLayout();
-
-    this.ui.statusToggleButton = this.add
-      .rectangle(toggleLayout.statusX, toggleLayout.y, TOGGLE_BUTTON_WIDTH, TOGGLE_BUTTON_HEIGHT, 0x0b1220)
-      .setOrigin(0)
-      .setStrokeStyle(1, 0x475569)
-      .setInteractive({ useHandCursor: true })
-      .setDepth(20)
-      .on('pointerup', () => this.toggleStatusPanel());
-
-    this.ui.statusToggleText = this.add
-      .text(toggleLayout.statusX + (TOGGLE_BUTTON_WIDTH / 2), toggleLayout.y + (TOGGLE_BUTTON_HEIGHT / 2), '', {
-        fontFamily: 'Arial',
-        fontSize: '13px',
-        color: '#e2e8f0',
-      })
-      .setOrigin(0.5)
-      .setDepth(21);
-
-    this.ui.statusPanelBg = this.add
-      .rectangle(panelX, panelY, panelW, panelH, 0x020617)
-      .setOrigin(0)
-      .setAlpha(0.96)
-      .setStrokeStyle(1, 0x1e40af)
-      .setDepth(40);
-
-    this.ui.statusPanelTitle = this.add
-      .text(panelX + 12, panelY + 8, '상태 패널', {
-        fontFamily: 'Arial',
-        fontSize: '14px',
-        color: '#93c5fd',
-        fontStyle: 'bold',
-      })
-      .setDepth(41);
-
-    this.ui.statusPanelBody = this.add
-      .text(panelX + 12, panelY + 32, '', {
-        fontFamily: 'Arial',
-        fontSize: '13px',
-        color: '#e2e8f0',
-        lineSpacing: 5,
-        wordWrap: { width: panelW - 24, useAdvancedWrap: true },
-      })
-      .setDepth(41);
-
-    this.ui.statusPanelItems = [
-      this.ui.statusPanelBg,
-      this.ui.statusPanelTitle,
-      this.ui.statusPanelBody,
-    ];
-    this.ui.statusPanelItems.forEach((item) => item.setVisible(this.isStatusPanelVisible));
-  }
-
   toggleLogPanel() {
     this.isLogPanelVisible = !this.isLogPanelVisible;
     this.ui.logPanelItems?.forEach((item) => item.setVisible(this.isLogPanelVisible));
@@ -803,30 +740,12 @@ export default class UILayoutScene extends Phaser.Scene {
     this.refreshUI();
   }
 
-  toggleStatusPanel() {
-    this.isStatusPanelVisible = !this.isStatusPanelVisible;
-    this.ui.statusPanelItems?.forEach((item) => item.setVisible(this.isStatusPanelVisible));
-    this.syncDockedPanelsLayout();
-    this.refreshUI();
-  }
-
   syncDockedPanelsLayout() {
     const layout = this.getLayout();
-    let rightX = layout.width - 18;
-
     if (this.isLogPanelVisible && this.ui.logPanelBg) {
-      const logW = this.ui.logPanelBg.width;
-      const logX = rightX - logW;
+      const logX = layout.width - this.ui.logPanelBg.width - 18;
       const logY = layout.height - this.ui.logPanelBg.height - 18;
       this.positionLogPanel(logX, logY);
-      rightX = logX - 14;
-    }
-
-    if (this.isStatusPanelVisible && this.ui.statusPanelBg) {
-      const statusW = this.ui.statusPanelBg.width;
-      const statusX = rightX - statusW;
-      const statusY = layout.height - this.ui.statusPanelBg.height - 18;
-      this.positionStatusPanel(statusX, statusY);
     }
   }
 
@@ -841,12 +760,6 @@ export default class UILayoutScene extends Phaser.Scene {
     const viewportY = panelY + 50;
     this.ui.logViewport.setPosition(panelX + 10, viewportY);
     this.ui.logLines.forEach((line, idx) => line.setPosition(panelX + 12, viewportY + idx * LOG_LINE_HEIGHT));
-  }
-
-  positionStatusPanel(panelX, panelY) {
-    this.ui.statusPanelBg.setPosition(panelX, panelY);
-    this.ui.statusPanelTitle.setPosition(panelX + 12, panelY + 8);
-    this.ui.statusPanelBody.setPosition(panelX + 12, panelY + 32);
   }
 
   getCombatSnapshot() {
@@ -1166,7 +1079,7 @@ export default class UILayoutScene extends Phaser.Scene {
 
     this.ui.combatMainInfo?.setText([
       `현재 지역: ${zoneName} | 대상: ${monster.name} (Lv.${monster.level})`,
-      `기사 HP ${combatSnapshot.playerHpPercent}%  |  ${monster.name} HP ${combatSnapshot.monsterHpPercent}%`,
+      `기사 HP ${player.hp}/${player.maxHp} (${combatSnapshot.playerHpPercent}%)  |  ${monster.name} HP ${monster.hp}/${monster.maxHp} (${combatSnapshot.monsterHpPercent}%)`,
       `예상 DPS: ${dps} | 예상 생존 시간: ${survivability}초`,
       `재료 보유: ${drops || '없음'}`,
     ]);
@@ -1202,6 +1115,7 @@ export default class UILayoutScene extends Phaser.Scene {
       `공격력 강화 Lv.${attackLevel} | 체력 강화 Lv.${healthLevel}`,
       `현재 공격력 ${player.atk} (장비 +${player.equipmentBonus?.atk ?? 0})`,
       `현재 최대HP ${player.maxHp} (장비 +${player.equipmentBonus?.maxHp ?? 0})`,
+      `공격속도 ${combatSnapshot.playerAttackSpeed}/s | ${monster.name} ${combatSnapshot.monsterAttackSpeed}/s`,
       `DPS ${dps} | 생존 ${survivability}초`,
     ]);
 
@@ -1300,25 +1214,6 @@ export default class UILayoutScene extends Phaser.Scene {
       '- 패널 비율: 상단 14% / 중단 64%(좌64:우36) / 하단 22%',
       '- 개발자 이벤트 로그: 우측 하단 도킹 패널(F1/버튼 토글)',
     ]);
-
-
-    this.ui.statusPanelBody?.setText([
-      '[기사 상세]',
-      `HP: ${player.hp}/${player.maxHp} (${combatSnapshot.playerHpPercent}%)`,
-      `공격력: ${player.atk}`,
-      '방어력: 미구현',
-      `공격속도: ${combatSnapshot.playerAttackSpeed}/s`,
-      '치명타: 미구현',
-      '',
-      `[${monster.name} 상세]`,
-      `HP: ${monster.hp}/${monster.maxHp} (${combatSnapshot.monsterHpPercent}%)`,
-      `공격력: ${monster.atk}`,
-      '방어력: 미구현',
-      `공격속도: ${combatSnapshot.monsterAttackSpeed}/s`,
-      '치명타: 미구현',
-    ]);
-
-    this.ui.statusToggleText?.setText(this.isStatusPanelVisible ? '상태 숨기기' : '상태 보기');
     this.ui.logToggleText?.setText(this.isLogPanelVisible ? '로그 숨기기 (F1)' : '로그 보기 (F1)');
     this.syncDockedPanelsLayout();
     this.renderLogList();
