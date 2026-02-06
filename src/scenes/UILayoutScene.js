@@ -9,6 +9,7 @@ import {
   calcSurvivability,
   getUpgradeCost,
 } from '../core/progression.js';
+import { offlineRewardBalance } from '../design/offlineBalance.js';
 
 const UI_THEME = {
   panelStroke: 0x1f2937,
@@ -149,7 +150,7 @@ export default class UILayoutScene extends Phaser.Scene {
     const restored = restoreState(parsedSave, this.contentData);
     const now = Date.now();
     const offlineSec = Math.max(0, (now - (restored.meta.savedAt ?? now)) / 1000);
-    const reward = calculateOfflineReward(restored.state, offlineSec);
+    const reward = calculateOfflineReward(restored.state, offlineSec, offlineRewardBalance);
     const appliedState = applyOfflineReward(restored.state, reward);
 
     if (restored.meta.isFallback) {

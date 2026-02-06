@@ -52,6 +52,15 @@ PR4 저장/복구/오프라인 보상 순수 함수 검증은 아래 명령으�
 node scripts/verify-save-offline.mjs
 ```
 
+
+## 화면 실행 회귀 가드(노드 기반)
+
+화면 초기화 관련 회귀(중복 import, 레거시 자동저장 호출 재도입)를 빠르게 확인하려면 아래 명령을 실행하세요.
+
+```bash
+node scripts/verify-ui-runtime-guard.mjs
+```
+
 ## GitHub Pages에서 변경이 안 보일 때
 
 - 저장소 **Settings → Pages → Build and deployment** 에서 Source가 `Deploy from a branch` + Branch `main` / Folder `/ (root)` 인지 확인합니다.
