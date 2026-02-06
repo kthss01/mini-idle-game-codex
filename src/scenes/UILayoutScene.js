@@ -8,8 +8,6 @@ import {
   calcSurvivability,
   getUpgradeCost,
 } from '../core/progression.js';
-import { buildSaveState, restoreState } from '../core/save.js';
-import { applyOfflineReward, calculateOfflineReward } from '../core/offlineReward.js';
 import { offlineRewardBalance } from '../design/offlineBalance.js';
 
 const UI_THEME = {
@@ -59,8 +57,6 @@ export default class UILayoutScene extends Phaser.Scene {
     this.buildLayout();
     this.bindResize();
     this.bindInputs();
-    this.bindSaveHooks();
-    this.startAutoSave();
     this.refreshUI();
     this.showOfflineRewardNotice();
     this.setupPersistence();
