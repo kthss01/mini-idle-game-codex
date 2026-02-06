@@ -88,13 +88,22 @@ export default class UILayoutScene extends Phaser.Scene {
     this.load.json('content-items', 'src/data/content/items.json');
   }
 
-  create() {
+  create(data = {}) {
     this.contentData = buildContentData({
       zones: this.cache.json.get('content-zones') ?? [],
       monsters: this.cache.json.get('content-monsters') ?? [],
       items: this.cache.json.get('content-items') ?? [],
     });
-    this.combatState = this.loadGameState();
+
+    const mode = data?.mode === 'new' ? 'new' : 'continue';
+    if (mode === 'new') {
+      window.localStorage.removeItem(SAVE_STORAGE_KEY);
+      this.offlineRewardSummary = null;
+      this.combatState = createCombatState(this.contentData);
+    } else {
+      this.combatState = this.loadGameState();
+    }
+
     this.buildLayout();
     this.bindResize();
     this.bindInputs();
