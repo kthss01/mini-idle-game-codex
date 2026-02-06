@@ -78,6 +78,7 @@ export default class UILayoutScene extends Phaser.Scene {
     this.lastSkillEventTimestamp = -1;
     this.skillToast = null;
     this.actionToast = null;
+    this.isDebugUi = false;
   }
 
   preload() {
@@ -87,6 +88,7 @@ export default class UILayoutScene extends Phaser.Scene {
   }
 
   create(data = {}) {
+    this.isDebugUi = this.resolveDebugUiFlag();
     this.contentData = buildContentData({
       zones: this.cache.json.get('content-zones') ?? [],
       monsters: this.cache.json.get('content-monsters') ?? [],
@@ -129,10 +131,12 @@ export default class UILayoutScene extends Phaser.Scene {
       return;
     }
 
-    this.input.keyboard?.on('keydown-F1', (event) => {
-      event?.preventDefault?.();
-      this.toggleLogPanel();
-    });
+    if (this.isDebugUi) {
+      this.input.keyboard?.on('keydown-F1', (event) => {
+        event?.preventDefault?.();
+        this.toggleLogPanel();
+      });
+    }
 
     this.input.keyboard?.on('keydown-E', () => {
       const first = this.combatState.inventory?.equipment?.[0];
@@ -321,7 +325,14 @@ export default class UILayoutScene extends Phaser.Scene {
     this.createCombatPanel(layout.middleLeft);
     this.createProgressionPanel(layout.middleRight);
     this.createBottomTabs(layout.bottom);
-    this.createLogPanel(layout);
+    if (this.isDebugUi) {
+      this.createLogPanel(layout);
+    }
+  }
+
+  resolveDebugUiFlag() {
+    const query = window.location?.search ?? '';
+    return new URLSearchParams(query).get('debugUI') === '1';
   }
 
   drawPanel(bounds, fill) {
@@ -332,7 +343,7 @@ export default class UILayoutScene extends Phaser.Scene {
   }
 
   createTopHUD(bounds) {
-    const toggleReservedWidth = TOGGLE_BUTTON_WIDTH + (TOP_UI_MARGIN * 2);
+    const toggleReservedWidth = this.isDebugUi ? TOGGLE_BUTTON_WIDTH + (TOP_UI_MARGIN * 2) : 0;
     const actionReservedWidth = (TOP_ACTION_BUTTON_WIDTH * 3) + (TOP_ACTION_BUTTON_GAP * 2) + 24;
     const slotAreaWidth = Math.max(360, bounds.w - toggleReservedWidth - actionReservedWidth);
     const slotWidth = slotAreaWidth / 3;
@@ -734,6 +745,9 @@ export default class UILayoutScene extends Phaser.Scene {
   }
 
   toggleLogPanel() {
+    if (!this.ui.logPanelItems) {
+      return;
+    }
     this.isLogPanelVisible = !this.isLogPanelVisible;
     this.ui.logPanelItems?.forEach((item) => item.setVisible(this.isLogPanelVisible));
     this.syncDockedPanelsLayout();
@@ -812,6 +826,9 @@ export default class UILayoutScene extends Phaser.Scene {
   }
 
   scrollLog(direction) {
+    if (!this.ui.logLines) {
+      return;
+    }
     const eventCount = this.combatState.combatLog?.events?.length ?? 0;
     const maxOffset = Math.max(0, eventCount - this.logVisibleCount);
     this.logScrollOffset = Phaser.Math.Clamp(this.logScrollOffset + direction, 0, maxOffset);
@@ -1212,10 +1229,12 @@ export default class UILayoutScene extends Phaser.Scene {
       '반응형 기준',
       '- 최소 해상도: 960x540 유지',
       '- 패널 비율: 상단 14% / 중단 64%(좌64:우36) / 하단 22%',
-      '- 개발자 이벤트 로그: 우측 하단 도킹 패널(F1/버튼 토글)',
+      '- 개발자 이벤트 로그: debugUI=1에서만 노출',
     ]);
-    this.ui.logToggleText?.setText(this.isLogPanelVisible ? '로그 숨기기 (F1)' : '로그 보기 (F1)');
-    this.syncDockedPanelsLayout();
-    this.renderLogList();
+    if (this.ui.logPanelItems) {
+      this.ui.logToggleText?.setText(this.isLogPanelVisible ? '로그 숨기기 (F1)' : '로그 보기 (F1)');
+      this.syncDockedPanelsLayout();
+      this.renderLogList();
+    }
   }
 }
