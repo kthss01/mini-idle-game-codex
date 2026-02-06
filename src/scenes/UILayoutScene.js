@@ -55,6 +55,9 @@ const TOGGLE_BUTTON_WIDTH = 132;
 const TOGGLE_BUTTON_HEIGHT = 38;
 const TOGGLE_BUTTON_GAP = 12;
 const TOP_UI_MARGIN = 12;
+const TOP_ACTION_BUTTON_WIDTH = 84;
+const TOP_ACTION_BUTTON_HEIGHT = 34;
+const TOP_ACTION_BUTTON_GAP = 8;
 
 export default class UILayoutScene extends Phaser.Scene {
   constructor() {
@@ -76,6 +79,7 @@ export default class UILayoutScene extends Phaser.Scene {
     this.contentData = null;
     this.lastSkillEventTimestamp = -1;
     this.skillToast = null;
+    this.actionToast = null;
   }
 
   preload() {
@@ -129,6 +133,18 @@ export default class UILayoutScene extends Phaser.Scene {
         this.tryEquipItem(first.id);
       }
     });
+    this.input.keyboard?.on('keydown-F2', (event) => {
+      event?.preventDefault?.();
+      this.handleManualSave();
+    });
+    this.input.keyboard?.on('keydown-F3', (event) => {
+      event?.preventDefault?.();
+      this.handleManualLoad();
+    });
+    this.input.keyboard?.on('keydown-F4', (event) => {
+      event?.preventDefault?.();
+      this.scene.start('TitleScene');
+    });
     this.input.keyboard?.on('keydown-ONE', () => this.tryUnequipSlot(EquipmentSlot.WEAPON));
     this.input.keyboard?.on('keydown-TWO', () => this.tryUnequipSlot(EquipmentSlot.ARMOR));
     this.input.keyboard?.on('keydown-THREE', () => this.tryUnequipSlot(EquipmentSlot.RING));
@@ -162,8 +178,13 @@ export default class UILayoutScene extends Phaser.Scene {
     }
   }
 
-  loadGameState() {
+  loadGameState(options = {}) {
+    const { applyOfflineRewardOnLoad = true, showOfflineRewardNotice = true } = options;
     const fallbackState = createCombatState(this.contentData);
+
+    if (!showOfflineRewardNotice) {
+      this.offlineRewardSummary = null;
+    }
 
     const raw = window.localStorage.getItem(SAVE_STORAGE_KEY);
     if (!raw) {
@@ -175,9 +196,11 @@ export default class UILayoutScene extends Phaser.Scene {
       parsedSave = JSON.parse(raw);
     } catch (_error) {
       window.localStorage.removeItem(SAVE_STORAGE_KEY);
-      this.offlineRewardSummary = {
-        message: '저장 데이터가 손상되어 새 게임으로 시작합니다.',
-      };
+      if (showOfflineRewardNotice) {
+        this.offlineRewardSummary = {
+          message: '저장 데이터가 손상되어 새 게임으로 시작합니다.',
+        };
+      }
       return fallbackState;
     }
 
@@ -188,16 +211,22 @@ export default class UILayoutScene extends Phaser.Scene {
     const appliedState = applyOfflineReward(restored.state, reward);
 
     if (restored.meta.isFallback) {
-      this.offlineRewardSummary = {
-        message: '저장 데이터를 복구하지 못해 기본 상태로 시작합니다.',
-      };
+      if (showOfflineRewardNotice) {
+        this.offlineRewardSummary = {
+          message: '저장 데이터를 복구하지 못해 기본 상태로 시작합니다.',
+        };
+      }
       return fallbackState;
     }
 
-    if (reward.killsGained > 0 || reward.goldGained > 0) {
+    if (showOfflineRewardNotice && (reward.killsGained > 0 || reward.goldGained > 0)) {
       this.offlineRewardSummary = {
         message: `오프라인 ${reward.offlineSecApplied}초 동안 ${reward.killsGained}마리 처치, ${reward.goldGained}G 획득!`,
       };
+    }
+
+    if (!applyOfflineRewardOnLoad) {
+      return restored.state;
     }
 
     return appliedState;
@@ -298,7 +327,8 @@ export default class UILayoutScene extends Phaser.Scene {
 
   createTopHUD(bounds) {
     const toggleReservedWidth = (TOGGLE_BUTTON_WIDTH * 2) + TOGGLE_BUTTON_GAP + (TOP_UI_MARGIN * 2);
-    const slotAreaWidth = Math.max(360, bounds.w - toggleReservedWidth);
+    const actionReservedWidth = (TOP_ACTION_BUTTON_WIDTH * 3) + (TOP_ACTION_BUTTON_GAP * 2) + 24;
+    const slotAreaWidth = Math.max(360, bounds.w - toggleReservedWidth - actionReservedWidth);
     const slotWidth = slotAreaWidth / 3;
     const slotStartX = bounds.x + 18;
 
@@ -307,6 +337,39 @@ export default class UILayoutScene extends Phaser.Scene {
       this.createHUDItem(slotStartX + slotWidth, bounds.y + 14, slotWidth - 24, '보석', '0'),
       this.createHUDItem(slotStartX + slotWidth * 2, bounds.y + 14, slotWidth - 24, '스테이지', '1'),
     ];
+
+    this.createTopActionButtons(bounds);
+  }
+
+  createTopActionButtons(bounds) {
+    const rightOffset = (TOGGLE_BUTTON_WIDTH * 2) + TOGGLE_BUTTON_GAP + (TOP_UI_MARGIN * 3);
+    const totalWidth = (TOP_ACTION_BUTTON_WIDTH * 3) + (TOP_ACTION_BUTTON_GAP * 2);
+    const startX = bounds.x + bounds.w - rightOffset - totalWidth;
+    const y = bounds.y + TOP_UI_MARGIN + 2;
+
+    this.ui.topActionButtons = [
+      this.createTopActionButton(startX, y, '저장', 0x0f766e, () => this.handleManualSave()),
+      this.createTopActionButton(startX + TOP_ACTION_BUTTON_WIDTH + TOP_ACTION_BUTTON_GAP, y, '불러오기', 0x1d4ed8, () => this.handleManualLoad()),
+      this.createTopActionButton(startX + (TOP_ACTION_BUTTON_WIDTH + TOP_ACTION_BUTTON_GAP) * 2, y, '타이틀로', 0x7c2d12, () => this.scene.start('TitleScene')),
+    ];
+  }
+
+  createTopActionButton(x, y, label, color, onClick) {
+    const button = this.add
+      .rectangle(x, y, TOP_ACTION_BUTTON_WIDTH, TOP_ACTION_BUTTON_HEIGHT, color)
+      .setOrigin(0)
+      .setStrokeStyle(1, 0x94a3b8)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerup', onClick);
+
+    const text = this.add.text(x + TOP_ACTION_BUTTON_WIDTH / 2, y + TOP_ACTION_BUTTON_HEIGHT / 2, label, {
+      fontFamily: 'Arial',
+      fontSize: '13px',
+      color: '#f8fafc',
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+
+    return { button, text };
   }
 
   createHUDItem(x, y, width, label, value) {
@@ -1013,6 +1076,49 @@ export default class UILayoutScene extends Phaser.Scene {
         this.skillToast = null;
       },
     });
+  }
+
+  showActionToast(message) {
+    if (!message) {
+      return;
+    }
+
+    this.actionToast?.destroy?.();
+    const layout = this.getLayout();
+    this.actionToast = this.add
+      .text(layout.top.x + (layout.top.w / 2), layout.top.y + layout.top.h - 8, message, {
+        fontFamily: 'Arial',
+        fontSize: '15px',
+        color: '#fef3c7',
+        stroke: '#111827',
+        strokeThickness: 4,
+      })
+      .setOrigin(0.5, 1)
+      .setDepth(2600)
+      .setAlpha(0.95);
+
+    this.tweens.add({
+      targets: this.actionToast,
+      alpha: 0,
+      y: this.actionToast.y - 8,
+      duration: 700,
+      onComplete: () => {
+        this.actionToast?.destroy?.();
+        this.actionToast = null;
+      },
+    });
+  }
+
+  handleManualSave() {
+    this.saveGameState();
+    this.showActionToast('저장 완료');
+  }
+
+  handleManualLoad() {
+    const nextState = this.loadGameState({ applyOfflineRewardOnLoad: false, showOfflineRewardNotice: false });
+    this.combatState = nextState;
+    this.refreshUI();
+    this.showActionToast('불러오기 완료');
   }
 
   animateCombatUnits() {
