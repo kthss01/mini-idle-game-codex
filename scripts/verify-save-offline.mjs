@@ -23,6 +23,18 @@ assert.equal(reward.offlineSecApplied, offlineRewardBalance.offlineCapSec);
 assert.ok(reward.killsGained >= 0);
 assert.ok(reward.goldGained >= 0);
 
+
+const stageOnlyState = {
+  ...restored.state,
+  monster: null,
+  progression: {
+    ...restored.state.progression,
+    difficultyLevel: 15,
+  },
+};
+const rewardFromStageFallback = calculateOfflineReward(stageOnlyState, offlineRewardBalance.minimumOfflineSec * 10, offlineRewardBalance);
+assert.ok(rewardFromStageFallback.goldGained > 0);
+
 const rewardedState = applyOfflineReward(restored.state, reward);
 assert.ok(rewardedState.gold >= restored.state.gold);
 assert.ok(rewardedState.progression.killCount >= restored.state.progression.killCount);

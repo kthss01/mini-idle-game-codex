@@ -54,7 +54,8 @@ export const calculateOfflineReward = (state, offlineSec, balanceConfig = offlin
     stageMultiplier;
 
   const killsGained = Math.max(0, Math.floor(offlineSecApplied * effectiveKillsPerSec));
-  const baseGoldPerKill = Math.max(0, state?.monster?.goldReward ?? spawnMonster(1).goldReward);
+  const fallbackGoldReward = spawnMonster(Math.max(1, Math.floor(state?.progression?.difficultyLevel ?? 1))).goldReward;
+  const baseGoldPerKill = Math.max(0, state?.monster?.goldReward ?? fallbackGoldReward);
   const goldMultiplier = balanceConfig.goldEfficiency ?? offlineRewardBalance.goldEfficiency;
   const goldGained = Math.max(0, Math.floor(killsGained * baseGoldPerKill * goldMultiplier));
 
