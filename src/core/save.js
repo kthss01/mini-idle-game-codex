@@ -3,6 +3,7 @@ import { applyPlayerStatSnapshot } from './progression.js';
 import { createEmptyEquipmentSlots, normalizeEquipmentItem } from './equipment.js';
 import { combatRules, playerBaseStats } from '../design/balance.js';
 import { getDefaultZone } from '../data/contentData.js';
+import { createObjectiveState, ensureObjectiveState } from './objectives.js';
 
 export const SAVE_VERSION = 3;
 export const SAVE_STORAGE_KEY = 'mini-idle-game-save-v3';
@@ -50,6 +51,7 @@ export const buildSaveState = (gameState, now = Date.now()) => ({
     equipment: gameState?.inventory?.equipment ?? [],
     shopOffer: gameState?.inventory?.shopOffer ?? null,
   },
+  objectives: ensureObjectiveState(gameState?.objectives, now),
 });
 
 const hydrateCombatState = (saveData, contentData) => {
@@ -107,6 +109,7 @@ const hydrateCombatState = (saveData, contentData) => {
       shopOffer: normalizeEquipmentItem(saveData.inventory?.shopOffer),
       lastDrops: [],
     },
+    objectives: ensureObjectiveState(saveData.objectives),
   };
 
   return applyPlayerStatSnapshot(hydrated);
@@ -150,6 +153,7 @@ export const restoreState = (rawSave, contentData) => {
       equipment: rawSave.inventory?.equipment ?? [],
       shopOffer: rawSave.inventory?.shopOffer ?? null,
     },
+    objectives: rawSave.objectives ?? createObjectiveState(rawSave.savedAt ?? Date.now()),
   };
 
   return {

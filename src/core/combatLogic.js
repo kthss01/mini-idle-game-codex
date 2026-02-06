@@ -2,6 +2,16 @@ import { combatRules, growthRules, playerBaseStats } from '../design/balance.js'
 import { compareEquipmentDelta, createEmptyEquipmentSlots, createShopEquipment, EquipmentSlot, normalizeEquipmentItem } from './equipment.js';
 import { applyPlayerStatSnapshot } from './progression.js';
 import { getDefaultZone, getUnlockedZones, resolveZone, rollDropTable, selectMonsterForZone } from '../data/contentData.js';
+import {
+  applyDailyQuestReset,
+  claimObjectiveRewards,
+  createObjectiveState,
+  ensureObjectiveState,
+  trackBattleWin,
+  trackEquipSwap,
+  trackEquipmentAcquired,
+  trackSkillTrigger,
+} from './objectives.js';
 
 export const MAX_COMBAT_LOGS = 200;
 
@@ -242,6 +252,7 @@ export const createCombatState = (contentData) => {
       shopOffer: createShopEquipment(1),
       lastDrops: [],
     },
+    objectives: createObjectiveState(),
     combat: {
       tick: 0,
       elapsedMs: 0,
@@ -344,8 +355,11 @@ const resolveKill = (state, contentData) => {
     },
   };
 
+  const objectiveState = trackBattleWin(baseState.objectives);
+
   const healedState = applyPlayerStatSnapshot({
     ...baseState,
+    objectives: objectiveState,
     player: {
       ...baseState.player,
       hp: Math.min(baseState.player.maxHp, baseState.player.hp + 8),
@@ -438,8 +452,11 @@ const executeCombatTick = (state, contentData) => {
     });
     const finalDamage = skillResolution.damage;
 
+    const triggeredCount = skillResolution.events.length;
+
     nextState = pushCombatEvents({
       ...nextState,
+      objectives: triggeredCount > 0 ? trackSkillTrigger(nextState.objectives, triggeredCount) : nextState.objectives,
       monster: {
         ...nextState.monster,
         hp: applyDamage(nextState.monster.hp, finalDamage),
@@ -474,8 +491,11 @@ const executeCombatTick = (state, contentData) => {
     });
     const finalDamage = skillResolution.damage;
 
+    const triggeredCount = skillResolution.events.length;
+
     nextState = pushCombatEvents({
       ...nextState,
+      objectives: triggeredCount > 0 ? trackSkillTrigger(nextState.objectives, triggeredCount) : nextState.objectives,
       player: {
         ...nextState.player,
         hp: applyDamage(nextState.player.hp, finalDamage),
@@ -525,6 +545,7 @@ export const equipItemFromInventory = (state, itemId) => {
 
   const nextState = applyPlayerStatSnapshot({
     ...state,
+    objectives: trackEquipSwap(state.objectives),
     player: {
       ...state.player,
       equipmentSlots: {
@@ -558,6 +579,7 @@ export const unequipSlot = (state, slot) => {
 
   const nextState = applyPlayerStatSnapshot({
     ...state,
+    objectives: trackEquipSwap(state.objectives),
     player: {
       ...state.player,
       equipmentSlots: {
@@ -584,8 +606,11 @@ export const purchaseShopOffer = (state) => {
     return state;
   }
 
+  const trackedObjectives = trackEquipmentAcquired(state.objectives, offer);
+
   return pushCombatEvents({
     ...state,
+    objectives: trackedObjectives,
     gold: state.gold - offer.value,
     inventory: {
       ...state.inventory,
@@ -606,6 +631,7 @@ export const tickCombat = (state, deltaMs, contentData) => {
 
   let nextState = {
     ...state,
+    objectives: applyDailyQuestReset(ensureObjectiveState(state.objectives)),
     combat: {
       ...state.combat,
       elapsedMs: state.combat.elapsedMs + deltaMs,
@@ -624,4 +650,17 @@ export const tickCombat = (state, deltaMs, contentData) => {
   }
 
   return nextState;
+};
+
+export const claimAllRewards = (state) => {
+  const claimed = claimObjectiveRewards(state);
+  if ((claimed.rewardSummary?.gold ?? 0) <= 0 && (claimed.rewardSummary?.boxes ?? 0) <= 0) {
+    return state;
+  }
+
+  return pushCombatEvents(claimed, [createCombatEvent({
+    elapsedMs: state.combat.elapsedMs,
+    type: CombatEventType.GOLD_GAINED,
+    message: `퀘스트/업적 보상 수령: +${claimed.rewardSummary.gold}G, 장비 상자 ${claimed.rewardSummary.boxes}개`,
+  })]);
 };
