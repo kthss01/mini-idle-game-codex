@@ -37,6 +37,15 @@ PR3 업그레이드(공격력/체력) 순수 함수와 비용 증가를 확인�
 node scripts/verify-progression.mjs
 ```
 
+
+## 저장/오프라인 보상 검증
+
+PR4 저장/불러오기 및 오프라인 보상 압축 계산을 확인하려면 아래 명령을 실행하세요.
+
+```bash
+node scripts/verify-save-offline.mjs
+```
+
 ## GitHub Pages에서 변경이 안 보일 때
 
 - 저장소 **Settings → Pages → Build and deployment** 에서 Source가 `Deploy from a branch` + Branch `main` / Folder `/ (root)` 인지 확인합니다.
