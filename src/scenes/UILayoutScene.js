@@ -8,6 +8,9 @@ import {
   calcSurvivability,
   getUpgradeCost,
 } from '../core/progression.js';
+import { buildSaveState, restoreState } from '../core/save.js';
+import { applyOfflineReward, calculateOfflineReward } from '../core/offlineReward.js';
+import { offlineRewardBalance } from '../design/offlineBalance.js';
 
 const UI_THEME = {
   panelStroke: 0x1f2937,
@@ -56,9 +59,77 @@ export default class UILayoutScene extends Phaser.Scene {
     this.buildLayout();
     this.bindResize();
     this.bindInputs();
+    this.bindSaveHooks();
+    this.startAutoSave();
     this.refreshUI();
     this.showOfflineRewardNotice();
     this.setupPersistence();
+  }
+
+
+  loadCombatState() {
+    const rawSave = window.localStorage.getItem(this.saveStorageKey);
+    const restored = restoreState(rawSave);
+
+    this.combatState = restored.state;
+
+    if (!restored.meta.isValid) {
+      return;
+    }
+
+    const offlineSec = Math.max(0, Math.floor((Date.now() - restored.meta.savedAt) / 1000));
+    const reward = calculateOfflineReward(this.combatState, offlineSec, offlineRewardBalance);
+    this.combatState = applyOfflineReward(this.combatState, reward);
+
+    if (reward.killsGained > 0 || reward.goldGained > 0) {
+      this.offlineSummary = reward;
+    }
+  }
+
+  startAutoSave() {
+    this.saveTimer = this.time.addEvent({
+      delay: this.saveIntervalMs,
+      loop: true,
+      callback: () => {
+        this.saveCombatState();
+      },
+    });
+  }
+
+  bindSaveHooks() {
+    this.events.on(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.saveCombatState();
+      this.saveTimer?.remove?.();
+      this.saveTimer = null;
+      if (this.beforeUnloadHandler) {
+        window.removeEventListener('beforeunload', this.beforeUnloadHandler);
+        this.beforeUnloadHandler = null;
+      }
+    });
+
+    this.events.on(Phaser.Scenes.Events.DESTROY, () => {
+      this.saveCombatState();
+      this.saveTimer?.remove?.();
+      this.saveTimer = null;
+      if (this.beforeUnloadHandler) {
+        window.removeEventListener('beforeunload', this.beforeUnloadHandler);
+        this.beforeUnloadHandler = null;
+      }
+    });
+
+    this.beforeUnloadHandler = () => {
+      this.saveCombatState();
+    };
+    window.addEventListener('beforeunload', this.beforeUnloadHandler);
+  }
+
+  saveCombatState() {
+    if (!this.combatState) {
+      return;
+    }
+
+    const payload = buildSaveState(this.combatState, Date.now());
+    window.localStorage.setItem(this.saveStorageKey, JSON.stringify(payload));
   }
 
   update(_time, delta) {
