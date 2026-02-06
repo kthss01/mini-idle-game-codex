@@ -1,4 +1,13 @@
-import { CombatEventType, changeZone, createCombatState, equipItemFromInventory, purchaseShopOffer, tickCombat, unequipSlot } from '../core/combatLogic.js';
+import {
+  claimAllRewards,
+  CombatEventType,
+  changeZone,
+  createCombatState,
+  equipItemFromInventory,
+  purchaseShopOffer,
+  tickCombat,
+  unequipSlot,
+} from '../core/combatLogic.js';
 import { applyOfflineReward, calculateOfflineReward } from '../core/offlineReward.js';
 import { buildContentData } from '../data/contentData.js';
 import { buildSaveState, restoreState, SAVE_STORAGE_KEY } from '../core/save.js';
@@ -527,6 +536,20 @@ export default class UILayoutScene extends Phaser.Scene {
       wordWrap: { width: bounds.w - 40, useAdvancedWrap: true },
       lineSpacing: 6,
     });
+
+    this.ui.claimRewardsButton = this.add
+      .rectangle(bounds.x + bounds.w - 220, bounds.y + 14, 200, 36, 0x065f46)
+      .setOrigin(0)
+      .setStrokeStyle(1, 0x10b981)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerup', () => this.tryClaimRewards());
+
+    this.ui.claimRewardsText = this.add.text(bounds.x + bounds.w - 206, bounds.y + 23, '보상 수령', {
+      fontFamily: 'Arial',
+      fontSize: '14px',
+      color: '#d1fae5',
+      fontStyle: 'bold',
+    });
   }
 
 
@@ -946,6 +969,21 @@ export default class UILayoutScene extends Phaser.Scene {
     this.refreshUI();
   }
 
+  tryClaimRewards() {
+    const nextState = claimAllRewards(this.combatState);
+    if (nextState === this.combatState) {
+      this.upgradeFeedback = '수령 가능한 퀘스트/업적 보상이 없습니다.';
+      this.ui.slotHint.setColor('#fef08a');
+      this.refreshUI();
+      return;
+    }
+
+    this.combatState = nextState;
+    this.upgradeFeedback = `보상 수령 완료 (+${nextState.rewardSummary.gold}G, 상자 ${nextState.rewardSummary.boxes}개)`;
+    this.ui.slotHint.setColor('#86efac');
+    this.refreshUI();
+  }
+
 
   showSkillToast(message) {
     if (!message) {
@@ -1091,10 +1129,37 @@ export default class UILayoutScene extends Phaser.Scene {
     }
     this.ui.slotHint?.setText(this.upgradeFeedback || '강화 버튼으로 전투 체감을 올려보세요.');
 
+    const objectives = this.combatState.objectives;
+    const getStatusLabel = (entry) => {
+      if (entry.status === 'claimed') return '수령 완료';
+      if (entry.status === 'claimable') return '수령 가능';
+      return '진행 중';
+    };
+
+    const questLines = (objectives?.quests?.entries ?? []).map((entry) => (
+      `- [${getStatusLabel(entry)}] ${entry.name} ${entry.progress}/${entry.target}`
+    ));
+    const achievementLines = (objectives?.achievements?.entries ?? []).map((entry) => (
+      `- [${getStatusLabel(entry)}] ${entry.name} ${entry.progress}/${entry.target}`
+    ));
+
     const tabMessage = {
-      업그레이드: '업그레이드 탭: 장비/강화/상점 연동 완료. 장착/해제/비교가 가능합니다.',
-      퀘스트: '퀘스트 탭 플레이스홀더: 일일/주간 퀘스트 목록이 들어올 영역입니다. (미개발 영역 배치 확정)',
-      상점: '상점 탭 플레이스홀더: 재화 소비형 패키지/소모품 목록이 들어올 영역입니다. (미개발 영역 배치 확정)',
+      업그레이드: [
+        '업그레이드 탭: 장비/강화/상점 연동 완료. 장착/해제/비교가 가능합니다.',
+      ],
+      퀘스트: [
+        `일일 퀘스트 리셋 정책: ${objectives?.resetPolicy?.description ?? '로컬 자정 기준 리셋'}`,
+        '',
+        '[일일 퀘스트]',
+        ...questLines,
+        '',
+        '[업적(누적/영구)]',
+        ...achievementLines,
+      ],
+      상점: [
+        '상점 탭: 골드를 소모해 장비를 구매할 수 있습니다.',
+        '퀘스트/업적 보상 상자도 동일한 장비 등급 테이블을 재사용합니다.',
+      ],
     };
 
     this.ui.tabButtons?.forEach(({ tab, button }) => {
@@ -1107,8 +1172,13 @@ export default class UILayoutScene extends Phaser.Scene {
       text.setColor(isCurrent ? '#dcfce7' : '#dbeafe');
     });
 
+    const claimableExists = [...(objectives?.quests?.entries ?? []), ...(objectives?.achievements?.entries ?? [])]
+      .some((entry) => entry.status === 'claimable');
+    this.ui.claimRewardsButton?.setFillStyle(claimableExists ? 0x047857 : 0x334155);
+    this.ui.claimRewardsText?.setColor(claimableExists ? '#d1fae5' : '#94a3b8');
+
     this.ui.tabContent?.setText([
-      tabMessage[this.activeTab],
+      ...(tabMessage[this.activeTab] ?? []),
       '',
       '반응형 기준',
       '- 최소 해상도: 960x540 유지',
