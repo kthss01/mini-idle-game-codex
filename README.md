@@ -37,6 +37,14 @@ PR3 업그레이드(공격력/체력) 순수 함수와 비용 증가를 확인�
 node scripts/verify-progression.mjs
 ```
 
+## 저장/오프라인 보상 검증
+
+PR4 저장/복구/오프라인 보상 순수 함수 검증은 아래 명령으로 실행할 수 있습니다.
+
+```bash
+node scripts/verify-save-offline.mjs
+```
+
 ## GitHub Pages에서 변경이 안 보일 때
 
 - 저장소 **Settings → Pages → Build and deployment** 에서 Source가 `Deploy from a branch` + Branch `main` / Folder `/ (root)` 인지 확인합니다.
@@ -66,4 +74,3 @@ node scripts/verify-progression.mjs
 - 문서는 가능한 한 한국어로 작성합니다.
 - 커밋/PR/머지 메시지도 가능한 한 한국어로 작성합니다.
 - 상세 정책은 `docs/documentation-policy.md` 를 참고하세요.
-
