@@ -37,6 +37,14 @@ const LOG_STYLE_BY_TYPE = {
 
 const LOG_LINE_HEIGHT = 24;
 const COMBAT_INFO_BOTTOM_MARGIN = 84;
+const HP_BAR_WIDTH = 188;
+const HP_BAR_HEIGHT = 16;
+const HP_LOW_THRESHOLD = 0.3;
+const HP_TRANSITION_MS = 200;
+const TOGGLE_BUTTON_WIDTH = 132;
+const TOGGLE_BUTTON_HEIGHT = 38;
+const TOGGLE_BUTTON_GAP = 12;
+const TOP_UI_MARGIN = 12;
 
 export default class UILayoutScene extends Phaser.Scene {
   constructor() {
@@ -46,8 +54,11 @@ export default class UILayoutScene extends Phaser.Scene {
     this.upgradeFeedback = '';
     this.ui = {};
     this.isLogPanelVisible = false;
+    this.isStatusPanelVisible = false;
     this.logScrollOffset = 0;
     this.logVisibleCount = 8;
+    this.playerHpDisplayRatio = 1;
+    this.monsterHpDisplayRatio = 1;
     this.autoSaveTimer = null;
     this.beforeUnloadHandler = null;
     this.offlineRewardSummary = null;
@@ -252,6 +263,7 @@ export default class UILayoutScene extends Phaser.Scene {
     this.createProgressionPanel(layout.middleRight);
     this.createBottomTabs(layout.bottom);
     this.createLogPanel(layout);
+    this.createStatusPanel(layout);
   }
 
   drawPanel(bounds, fill) {
@@ -262,12 +274,15 @@ export default class UILayoutScene extends Phaser.Scene {
   }
 
   createTopHUD(bounds) {
-    const slotWidth = bounds.w / 3;
+    const toggleReservedWidth = (TOGGLE_BUTTON_WIDTH * 2) + TOGGLE_BUTTON_GAP + (TOP_UI_MARGIN * 2);
+    const slotAreaWidth = Math.max(360, bounds.w - toggleReservedWidth);
+    const slotWidth = slotAreaWidth / 3;
+    const slotStartX = bounds.x + 18;
 
     this.ui.resourceTexts = [
-      this.createHUDItem(bounds.x + 18, bounds.y + 14, slotWidth - 24, '골드', '0'),
-      this.createHUDItem(bounds.x + slotWidth + 18, bounds.y + 14, slotWidth - 24, '보석', '0'),
-      this.createHUDItem(bounds.x + slotWidth * 2 + 18, bounds.y + 14, slotWidth - 24, '스테이지', '1'),
+      this.createHUDItem(slotStartX, bounds.y + 14, slotWidth - 24, '골드', '0'),
+      this.createHUDItem(slotStartX + slotWidth, bounds.y + 14, slotWidth - 24, '보석', '0'),
+      this.createHUDItem(slotStartX + slotWidth * 2, bounds.y + 14, slotWidth - 24, '스테이지', '1'),
     ];
   }
 
@@ -313,6 +328,34 @@ export default class UILayoutScene extends Phaser.Scene {
       fontFamily: 'Arial',
       fontSize: '16px',
       color: UI_THEME.textSecondary,
+    });
+
+    this.ui.playerHpBarBg = this.add
+      .rectangle(this.ui.playerSprite.x - HP_BAR_WIDTH / 2, centerY + 116, HP_BAR_WIDTH, HP_BAR_HEIGHT, 0x0f172a)
+      .setOrigin(0)
+      .setStrokeStyle(1, 0x475569);
+    this.ui.playerHpBarFill = this.add
+      .rectangle(this.ui.playerSprite.x - HP_BAR_WIDTH / 2, centerY + 116, HP_BAR_WIDTH, HP_BAR_HEIGHT, 0x22c55e)
+      .setOrigin(0);
+    this.ui.playerHpPercentText = this.add.text(this.ui.playerSprite.x - 22, centerY + 114, '100%', {
+      fontFamily: 'Arial',
+      fontSize: '13px',
+      color: '#e2e8f0',
+      fontStyle: 'bold',
+    });
+
+    this.ui.monsterHpBarBg = this.add
+      .rectangle(this.ui.monsterSprite.x - HP_BAR_WIDTH / 2, centerY + 116, HP_BAR_WIDTH, HP_BAR_HEIGHT, 0x0f172a)
+      .setOrigin(0)
+      .setStrokeStyle(1, 0x475569);
+    this.ui.monsterHpBarFill = this.add
+      .rectangle(this.ui.monsterSprite.x - HP_BAR_WIDTH / 2, centerY + 116, HP_BAR_WIDTH, HP_BAR_HEIGHT, 0x22c55e)
+      .setOrigin(0);
+    this.ui.monsterHpPercentText = this.add.text(this.ui.monsterSprite.x - 22, centerY + 114, '100%', {
+      fontFamily: 'Arial',
+      fontSize: '13px',
+      color: '#e2e8f0',
+      fontStyle: 'bold',
     });
 
     this.ui.combatInfoBg = this.add
@@ -451,14 +494,25 @@ export default class UILayoutScene extends Phaser.Scene {
     });
   }
 
+
+  getTopRightToggleLayout() {
+    const layout = this.getLayout();
+    const y = layout.top.y + TOP_UI_MARGIN;
+    const logX = layout.width - TOGGLE_BUTTON_WIDTH - TOP_UI_MARGIN;
+    const statusX = logX - TOGGLE_BUTTON_GAP - TOGGLE_BUTTON_WIDTH;
+    return { statusX, logX, y };
+  }
+
   createLogPanel(layout) {
     const panelW = Math.max(340, Math.floor(layout.width * 0.34));
     const panelH = Math.max(220, Math.floor(layout.height * 0.42));
     const panelX = layout.width - panelW - 18;
     const panelY = layout.height - panelH - 18;
 
+    const toggleLayout = this.getTopRightToggleLayout();
+
     this.ui.logToggleButton = this.add
-      .rectangle(layout.width - 132, 12, 120, 38, 0x0b1220)
+      .rectangle(toggleLayout.logX, toggleLayout.y, TOGGLE_BUTTON_WIDTH, TOGGLE_BUTTON_HEIGHT, 0x0b1220)
       .setOrigin(0)
       .setStrokeStyle(1, 0x475569)
       .setInteractive({ useHandCursor: true })
@@ -466,11 +520,12 @@ export default class UILayoutScene extends Phaser.Scene {
       .on('pointerup', () => this.toggleLogPanel());
 
     this.ui.logToggleText = this.add
-      .text(layout.width - 122, 22, '', {
+      .text(toggleLayout.logX + (TOGGLE_BUTTON_WIDTH / 2), toggleLayout.y + (TOGGLE_BUTTON_HEIGHT / 2), '', {
         fontFamily: 'Arial',
-        fontSize: '14px',
+        fontSize: '13px',
         color: '#e2e8f0',
       })
+      .setOrigin(0.5)
       .setDepth(21);
 
     this.ui.logPanelBg = this.add
@@ -552,10 +607,165 @@ export default class UILayoutScene extends Phaser.Scene {
     this.ui.logPanelItems = logItems;
   }
 
+  createStatusPanel(layout) {
+    const panelW = Math.max(320, Math.floor(layout.width * 0.28));
+    const panelH = Math.max(230, Math.floor(layout.height * 0.34));
+    const panelX = layout.width - panelW - 18;
+    const panelY = layout.height - panelH - 18;
+
+    const toggleLayout = this.getTopRightToggleLayout();
+
+    this.ui.statusToggleButton = this.add
+      .rectangle(toggleLayout.statusX, toggleLayout.y, TOGGLE_BUTTON_WIDTH, TOGGLE_BUTTON_HEIGHT, 0x0b1220)
+      .setOrigin(0)
+      .setStrokeStyle(1, 0x475569)
+      .setInteractive({ useHandCursor: true })
+      .setDepth(20)
+      .on('pointerup', () => this.toggleStatusPanel());
+
+    this.ui.statusToggleText = this.add
+      .text(toggleLayout.statusX + (TOGGLE_BUTTON_WIDTH / 2), toggleLayout.y + (TOGGLE_BUTTON_HEIGHT / 2), '', {
+        fontFamily: 'Arial',
+        fontSize: '13px',
+        color: '#e2e8f0',
+      })
+      .setOrigin(0.5)
+      .setDepth(21);
+
+    this.ui.statusPanelBg = this.add
+      .rectangle(panelX, panelY, panelW, panelH, 0x020617)
+      .setOrigin(0)
+      .setAlpha(0.96)
+      .setStrokeStyle(1, 0x1e40af)
+      .setDepth(40);
+
+    this.ui.statusPanelTitle = this.add
+      .text(panelX + 12, panelY + 8, '상태 패널', {
+        fontFamily: 'Arial',
+        fontSize: '14px',
+        color: '#93c5fd',
+        fontStyle: 'bold',
+      })
+      .setDepth(41);
+
+    this.ui.statusPanelBody = this.add
+      .text(panelX + 12, panelY + 32, '', {
+        fontFamily: 'Arial',
+        fontSize: '13px',
+        color: '#e2e8f0',
+        lineSpacing: 5,
+        wordWrap: { width: panelW - 24, useAdvancedWrap: true },
+      })
+      .setDepth(41);
+
+    this.ui.statusPanelItems = [
+      this.ui.statusPanelBg,
+      this.ui.statusPanelTitle,
+      this.ui.statusPanelBody,
+    ];
+    this.ui.statusPanelItems.forEach((item) => item.setVisible(this.isStatusPanelVisible));
+  }
+
   toggleLogPanel() {
     this.isLogPanelVisible = !this.isLogPanelVisible;
     this.ui.logPanelItems?.forEach((item) => item.setVisible(this.isLogPanelVisible));
+    this.syncDockedPanelsLayout();
     this.refreshUI();
+  }
+
+  toggleStatusPanel() {
+    this.isStatusPanelVisible = !this.isStatusPanelVisible;
+    this.ui.statusPanelItems?.forEach((item) => item.setVisible(this.isStatusPanelVisible));
+    this.syncDockedPanelsLayout();
+    this.refreshUI();
+  }
+
+  syncDockedPanelsLayout() {
+    const layout = this.getLayout();
+    let rightX = layout.width - 18;
+
+    if (this.isLogPanelVisible && this.ui.logPanelBg) {
+      const logW = this.ui.logPanelBg.width;
+      const logX = rightX - logW;
+      const logY = layout.height - this.ui.logPanelBg.height - 18;
+      this.positionLogPanel(logX, logY);
+      rightX = logX - 14;
+    }
+
+    if (this.isStatusPanelVisible && this.ui.statusPanelBg) {
+      const statusW = this.ui.statusPanelBg.width;
+      const statusX = rightX - statusW;
+      const statusY = layout.height - this.ui.statusPanelBg.height - 18;
+      this.positionStatusPanel(statusX, statusY);
+    }
+  }
+
+  positionLogPanel(panelX, panelY) {
+    const panelW = this.ui.logPanelBg.width;
+    this.ui.logPanelBg.setPosition(panelX, panelY);
+    this.ui.logPanelTitle.setPosition(panelX + 12, panelY + 8);
+    this.ui.logPanelHint.setPosition(panelX + 12, panelY + 28);
+    this.ui.logScrollUp.setPosition(panelX + panelW - 52, panelY + 8);
+    this.ui.logScrollDown.setPosition(panelX + panelW - 28, panelY + 8);
+
+    const viewportY = panelY + 50;
+    this.ui.logViewport.setPosition(panelX + 10, viewportY);
+    this.ui.logLines.forEach((line, idx) => line.setPosition(panelX + 12, viewportY + idx * LOG_LINE_HEIGHT));
+  }
+
+  positionStatusPanel(panelX, panelY) {
+    this.ui.statusPanelBg.setPosition(panelX, panelY);
+    this.ui.statusPanelTitle.setPosition(panelX + 12, panelY + 8);
+    this.ui.statusPanelBody.setPosition(panelX + 12, panelY + 32);
+  }
+
+  getCombatSnapshot() {
+    const { player, monster, progression } = this.combatState;
+    const playerHpRatio = Phaser.Math.Clamp((player.hp || 0) / Math.max(1, player.maxHp || 1), 0, 1);
+    const monsterHpRatio = Phaser.Math.Clamp((monster.hp || 0) / Math.max(1, monster.maxHp || 1), 0, 1);
+
+    return {
+      player,
+      monster,
+      progression,
+      playerHpRatio,
+      monsterHpRatio,
+      playerHpPercent: Math.round(playerHpRatio * 100),
+      monsterHpPercent: Math.round(monsterHpRatio * 100),
+      playerAttackSpeed: (1000 / Math.max(1, player.cooldownMs || 1)).toFixed(2),
+      monsterAttackSpeed: (1000 / Math.max(1, monster.cooldownMs || 1)).toFixed(2),
+    };
+  }
+
+  animateHpRatio(kind, targetRatio) {
+    const key = kind === 'player' ? 'playerHpDisplayRatio' : 'monsterHpDisplayRatio';
+    const tweenKey = kind === 'player' ? 'playerHpTween' : 'monsterHpTween';
+
+    this[tweenKey]?.stop?.();
+    this[tweenKey] = this.tweens.addCounter({
+      from: this[key],
+      to: targetRatio,
+      duration: HP_TRANSITION_MS,
+      ease: 'Quad.easeOut',
+      onUpdate: (tween) => {
+        this[key] = tween.getValue();
+      },
+      onComplete: () => {
+        this[key] = targetRatio;
+      },
+    });
+  }
+
+  updateHpBar(kind, hpRatio, hpPercent) {
+    const fill = kind === 'player' ? this.ui.playerHpBarFill : this.ui.monsterHpBarFill;
+    const text = kind === 'player' ? this.ui.playerHpPercentText : this.ui.monsterHpPercentText;
+    const displayRatio = kind === 'player' ? this.playerHpDisplayRatio : this.monsterHpDisplayRatio;
+    const ratio = Phaser.Math.Clamp(displayRatio, 0, 1);
+
+    fill?.setDisplaySize(HP_BAR_WIDTH * ratio, HP_BAR_HEIGHT);
+    fill?.setFillStyle(hpRatio <= HP_LOW_THRESHOLD ? 0xef4444 : 0x22c55e);
+    text?.setText(`${hpPercent}%`);
+    text?.setColor(hpRatio <= HP_LOW_THRESHOLD ? '#fecaca' : '#e2e8f0');
   }
 
   scrollLog(direction) {
@@ -651,6 +861,7 @@ export default class UILayoutScene extends Phaser.Scene {
 
   refreshUI() {
     const { player, monster, gold, progression, combat } = this.combatState;
+    const combatSnapshot = this.getCombatSnapshot();
     const currentStage = progression.difficultyLevel;
 
     const gems = Math.floor(progression.killCount / 15);
@@ -669,10 +880,19 @@ export default class UILayoutScene extends Phaser.Scene {
 
     this.ui.combatMainInfo?.setText([
       `현재 지역: ${zoneName} | 대상: ${monster.name} (Lv.${monster.level})`,
-      `기사 HP ${player.hp}/${player.maxHp}  |  ${monster.name} HP ${monster.hp}/${monster.maxHp}`,
+      `기사 HP ${combatSnapshot.playerHpPercent}%  |  ${monster.name} HP ${combatSnapshot.monsterHpPercent}%`,
       `예상 DPS: ${dps} | 예상 생존 시간: ${survivability}초`,
       `재료 보유: ${drops || '없음'}`,
     ]);
+
+    if (Math.abs(combatSnapshot.playerHpRatio - this.playerHpDisplayRatio) > 0.001) {
+      this.animateHpRatio('player', combatSnapshot.playerHpRatio);
+    }
+    if (Math.abs(combatSnapshot.monsterHpRatio - this.monsterHpDisplayRatio) > 0.001) {
+      this.animateHpRatio('monster', combatSnapshot.monsterHpRatio);
+    }
+    this.updateHpBar('player', combatSnapshot.playerHpRatio, combatSnapshot.playerHpPercent);
+    this.updateHpBar('monster', combatSnapshot.monsterHpRatio, combatSnapshot.monsterHpPercent);
 
     this.ui.playHint?.setText(`최근 전투 요약: ${combat.lastEvent}`);
     this.ui.offlineRewardText?.setText(this.offlineRewardSummary?.message || '');
@@ -722,7 +942,25 @@ export default class UILayoutScene extends Phaser.Scene {
     ]);
 
 
+    this.ui.statusPanelBody?.setText([
+      '[기사 상세]',
+      `HP: ${player.hp}/${player.maxHp} (${combatSnapshot.playerHpPercent}%)`,
+      `공격력: ${player.atk}`,
+      '방어력: 미구현',
+      `공격속도: ${combatSnapshot.playerAttackSpeed}/s`,
+      '치명타: 미구현',
+      '',
+      `[${monster.name} 상세]`,
+      `HP: ${monster.hp}/${monster.maxHp} (${combatSnapshot.monsterHpPercent}%)`,
+      `공격력: ${monster.atk}`,
+      '방어력: 미구현',
+      `공격속도: ${combatSnapshot.monsterAttackSpeed}/s`,
+      '치명타: 미구현',
+    ]);
+
+    this.ui.statusToggleText?.setText(this.isStatusPanelVisible ? '상태 숨기기' : '상태 보기');
     this.ui.logToggleText?.setText(this.isLogPanelVisible ? '로그 숨기기 (F1)' : '로그 보기 (F1)');
+    this.syncDockedPanelsLayout();
     this.renderLogList();
   }
 }
