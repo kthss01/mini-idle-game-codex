@@ -65,6 +65,8 @@ export default class UILayoutScene extends Phaser.Scene {
     this.beforeUnloadHandler = null;
     this.offlineRewardSummary = null;
     this.contentData = null;
+    this.lastSkillEventTimestamp = -1;
+    this.skillToast = null;
   }
 
   preload() {
@@ -944,6 +946,37 @@ export default class UILayoutScene extends Phaser.Scene {
     this.refreshUI();
   }
 
+
+  showSkillToast(message) {
+    if (!message) {
+      return;
+    }
+
+    this.skillToast?.destroy?.();
+    const layout = this.getLayout();
+    this.skillToast = this.add
+      .text(layout.middleLeft.x + 24, layout.middleLeft.y + 18, `✨ ${message}`, {
+        fontFamily: 'Arial',
+        fontSize: '18px',
+        color: '#e9d5ff',
+        stroke: '#111827',
+        strokeThickness: 4,
+      })
+      .setDepth(2600)
+      .setAlpha(0.98);
+
+    this.tweens.add({
+      targets: this.skillToast,
+      y: this.skillToast.y - 14,
+      alpha: 0,
+      duration: 900,
+      onComplete: () => {
+        this.skillToast?.destroy?.();
+        this.skillToast = null;
+      },
+    });
+  }
+
   animateCombatUnits() {
     if (!this.ui.monsterSprite || !this.ui.playerSprite) {
       return;
@@ -995,6 +1028,15 @@ export default class UILayoutScene extends Phaser.Scene {
     this.updateHpBar('monster', combatSnapshot.monsterHpRatio, combatSnapshot.monsterHpPercent);
 
     this.ui.playHint?.setText(`최근 전투 요약: ${combat.lastEvent} | 단축키 E: 인벤 첫 장비 장착, 1/2/3: 슬롯 해제`);
+
+    const latestSkillEvent = [...(this.combatState.combatLog?.events ?? [])]
+      .reverse()
+      .find((event) => event.type === CombatEventType.SKILL_TRIGGERED);
+
+    if (latestSkillEvent && latestSkillEvent.timestamp !== this.lastSkillEventTimestamp) {
+      this.lastSkillEventTimestamp = latestSkillEvent.timestamp;
+      this.showSkillToast(latestSkillEvent.message);
+    }
     this.ui.offlineRewardText?.setText(this.offlineRewardSummary?.message || '');
 
     const attackLevel = progression.upgrades.attackLevel;

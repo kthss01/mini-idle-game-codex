@@ -12,9 +12,55 @@ export const CombatEventType = {
   MONSTER_DEFEATED: '처치',
   GOLD_GAINED: '골드획득',
   LOOT_GAINED: '재료획득',
+  SKILL_TRIGGERED: '스킬발동',
   ZONE_UNLOCKED: '지역해금',
   STAGE_CLEAR: '스테이지클리어',
 };
+
+export const SkillTriggerType = {
+  ON_ATTACK: 'onAttack',
+  ON_HIT: 'onHit',
+};
+
+const KNIGHT_SKILLS = [
+  {
+    id: 'shield-block',
+    name: 'Shield Block',
+    trigger: SkillTriggerType.ON_HIT,
+    cooldown: 3500,
+    procChance: 0.35,
+    effect: {
+      type: 'damageReduction',
+      value: 0.5,
+    },
+    lastActivatedAt: -Infinity,
+  },
+  {
+    id: 'power-strike',
+    name: 'Power Strike',
+    trigger: SkillTriggerType.ON_ATTACK,
+    cooldown: 3000,
+    procChance: 0.3,
+    effect: {
+      type: 'bonusDamage',
+      value: 1.25,
+    },
+    lastActivatedAt: -Infinity,
+  },
+  {
+    id: 'battle-cry',
+    name: 'Battle Cry',
+    trigger: SkillTriggerType.ON_ATTACK,
+    cooldown: 8000,
+    procChance: 1,
+    effect: {
+      type: 'attackBuff',
+      value: 0.4,
+      durationMs: 2500,
+    },
+    lastActivatedAt: -Infinity,
+  },
+];
 
 export const applyDamage = (targetHp, damage) => Math.max(0, targetHp - Math.max(0, Math.floor(damage)));
 export const isDead = (hp) => hp <= 0;
@@ -30,6 +76,78 @@ const createCombatEvent = ({ elapsedMs, type, message, payload }) => ({
   message,
   ...(payload ? { payload } : {}),
 });
+
+const isSkillReady = (skill, elapsedMs) => elapsedMs - (skill.lastActivatedAt ?? -Infinity) >= skill.cooldown;
+
+const resolveSkillTriggers = ({ state, trigger, baseDamage, attackerName, defenderName }) => {
+  const elapsedMs = state.combat.elapsedMs;
+  const skills = state.player.skills ?? [];
+  const triggeredEvents = [];
+  const nextSkills = [...skills];
+  let nextDamage = baseDamage;
+  let nextBuffState = { ...(state.player.activeBuff ?? { atkMultiplier: 1, expiresAt: 0 }) };
+
+  nextSkills.forEach((skill, index) => {
+    if (skill.trigger !== trigger || !isSkillReady(skill, elapsedMs)) {
+      return;
+    }
+
+    // 규칙: 쿨타임이 준비된 경우에만 확률 판정을 수행한다.
+    if (Math.random() > skill.procChance) {
+      return;
+    }
+
+    const nextSkill = {
+      ...skill,
+      lastActivatedAt: elapsedMs,
+    };
+    nextSkills[index] = nextSkill;
+
+    if (skill.effect.type === 'bonusDamage') {
+      const bonusDamage = Math.round(baseDamage * skill.effect.value);
+      nextDamage += bonusDamage;
+      triggeredEvents.push(createCombatEvent({
+        elapsedMs,
+        type: CombatEventType.SKILL_TRIGGERED,
+        message: `${skill.name} 발동! ${attackerName} 추가 피해 +${bonusDamage}`,
+        payload: { skillId: skill.id, trigger },
+      }));
+      return;
+    }
+
+    if (skill.effect.type === 'damageReduction') {
+      const blocked = Math.round(baseDamage * skill.effect.value);
+      nextDamage = Math.max(0, baseDamage - blocked);
+      triggeredEvents.push(createCombatEvent({
+        elapsedMs,
+        type: CombatEventType.SKILL_TRIGGERED,
+        message: `${skill.name} 발동! ${defenderName} 피해 ${blocked} 감소`,
+        payload: { skillId: skill.id, trigger },
+      }));
+      return;
+    }
+
+    if (skill.effect.type === 'attackBuff') {
+      nextBuffState = {
+        atkMultiplier: 1 + skill.effect.value,
+        expiresAt: elapsedMs + skill.effect.durationMs,
+      };
+      triggeredEvents.push(createCombatEvent({
+        elapsedMs,
+        type: CombatEventType.SKILL_TRIGGERED,
+        message: `${skill.name} 발동! ${Math.round(skill.effect.durationMs / 1000)}초간 공격력 증가`,
+        payload: { skillId: skill.id, trigger },
+      }));
+    }
+  });
+
+  return {
+    damage: nextDamage,
+    skills: nextSkills,
+    activeBuff: nextBuffState,
+    events: triggeredEvents,
+  };
+};
 
 const pushCombatEvents = (state, newEvents) => {
   if (!newEvents.length) {
@@ -109,6 +227,11 @@ export const createCombatState = (contentData) => {
       },
       equipmentSlots: createEmptyEquipmentSlots(),
       equipmentBonus: { atk: 0, maxHp: 0 },
+      skills: KNIGHT_SKILLS.map((skill) => ({ ...skill })),
+      activeBuff: {
+        atkMultiplier: 1,
+        expiresAt: 0,
+      },
     },
     monster: initialMonster,
     gold: 0,
@@ -278,6 +401,11 @@ const resolvePlayerDefeat = (state) => pushCombatEvents({
 ]);
 
 const executeCombatTick = (state, contentData) => {
+  const nowElapsed = state.combat.elapsedMs;
+  const buff = state.player.activeBuff ?? { atkMultiplier: 1, expiresAt: 0 };
+  const isBuffActive = nowElapsed < (buff.expiresAt ?? 0);
+  const atkMultiplier = isBuffActive ? buff.atkMultiplier : 1;
+
   let nextState = {
     ...state,
     combat: {
@@ -287,6 +415,10 @@ const executeCombatTick = (state, contentData) => {
     player: {
       ...state.player,
       cooldownLeftMs: Math.max(0, state.player.cooldownLeftMs - combatRules.logicTickMs),
+      activeBuff: {
+        atkMultiplier,
+        expiresAt: isBuffActive ? buff.expiresAt : 0,
+      },
     },
     monster: {
       ...state.monster,
@@ -295,22 +427,37 @@ const executeCombatTick = (state, contentData) => {
   };
 
   if (nextState.player.cooldownLeftMs <= 0) {
-    const damage = nextState.player.atk;
+    // 전투 순서 고정: 장비/버프 보정 → 스킬 판정 → 최종 피해 계산
+    const adjustedDamage = Math.round(nextState.player.atk * (nextState.player.activeBuff?.atkMultiplier ?? 1));
+    const skillResolution = resolveSkillTriggers({
+      state: nextState,
+      trigger: SkillTriggerType.ON_ATTACK,
+      baseDamage: adjustedDamage,
+      attackerName: '기사',
+      defenderName: nextState.monster.name,
+    });
+    const finalDamage = skillResolution.damage;
+
     nextState = pushCombatEvents({
       ...nextState,
       monster: {
         ...nextState.monster,
-        hp: applyDamage(nextState.monster.hp, damage),
+        hp: applyDamage(nextState.monster.hp, finalDamage),
       },
       player: {
         ...nextState.player,
+        skills: skillResolution.skills,
+        activeBuff: skillResolution.activeBuff,
         cooldownLeftMs: nextState.player.cooldownMs,
       },
       combat: {
         ...nextState.combat,
-        lastEvent: `기사의 공격! ${damage} 피해`,
+        lastEvent: `기사의 공격! ${finalDamage} 피해`,
       },
-    }, [createCombatEvent({ elapsedMs: nextState.combat.elapsedMs, type: CombatEventType.DAMAGE, message: `기사 → ${nextState.monster.name} ${damage} 피해` })]);
+    }, [
+      ...skillResolution.events,
+      createCombatEvent({ elapsedMs: nextState.combat.elapsedMs, type: CombatEventType.DAMAGE, message: `기사 → ${nextState.monster.name} ${finalDamage} 피해` }),
+    ]);
   }
 
   if (isDead(nextState.monster.hp)) {
@@ -318,12 +465,22 @@ const executeCombatTick = (state, contentData) => {
   }
 
   if (nextState.monster.cooldownLeftMs <= 0) {
-    const damage = nextState.monster.atk;
+    const skillResolution = resolveSkillTriggers({
+      state: nextState,
+      trigger: SkillTriggerType.ON_HIT,
+      baseDamage: nextState.monster.atk,
+      attackerName: nextState.monster.name,
+      defenderName: '기사',
+    });
+    const finalDamage = skillResolution.damage;
+
     nextState = pushCombatEvents({
       ...nextState,
       player: {
         ...nextState.player,
-        hp: applyDamage(nextState.player.hp, damage),
+        hp: applyDamage(nextState.player.hp, finalDamage),
+        skills: skillResolution.skills,
+        activeBuff: skillResolution.activeBuff,
       },
       monster: {
         ...nextState.monster,
@@ -331,9 +488,12 @@ const executeCombatTick = (state, contentData) => {
       },
       combat: {
         ...nextState.combat,
-        lastEvent: `${nextState.monster.name}의 공격! ${damage} 피해`,
+        lastEvent: `${nextState.monster.name}의 공격! ${finalDamage} 피해`,
       },
-    }, [createCombatEvent({ elapsedMs: nextState.combat.elapsedMs, type: CombatEventType.DAMAGE, message: `${nextState.monster.name} → 기사 ${damage} 피해` })]);
+    }, [
+      ...skillResolution.events,
+      createCombatEvent({ elapsedMs: nextState.combat.elapsedMs, type: CombatEventType.DAMAGE, message: `${nextState.monster.name} → 기사 ${finalDamage} 피해` }),
+    ]);
   }
 
   if (isDead(nextState.player.hp)) {
