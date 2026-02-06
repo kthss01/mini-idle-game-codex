@@ -1,5 +1,6 @@
-import { CombatEventType, createCombatState, tickCombat } from '../core/combatLogic.js';
+import { CombatEventType, changeZone, createCombatState, tickCombat } from '../core/combatLogic.js';
 import { applyOfflineReward, calculateOfflineReward } from '../core/offlineReward.js';
+import { buildContentData } from '../data/contentData.js';
 import { buildSaveState, restoreState, SAVE_STORAGE_KEY } from '../core/save.js';
 import {
   ProgressionUpgradeType,
@@ -8,9 +9,6 @@ import {
   calcSurvivability,
   getUpgradeCost,
 } from '../core/progression.js';
-import { buildSaveState, restoreState } from '../core/save.js';
-import { applyOfflineReward, calculateOfflineReward } from '../core/offlineReward.js';
-import { offlineRewardBalance } from '../design/offlineBalance.js';
 
 const UI_THEME = {
   panelStroke: 0x1f2937,
@@ -52,88 +50,32 @@ export default class UILayoutScene extends Phaser.Scene {
     this.autoSaveTimer = null;
     this.beforeUnloadHandler = null;
     this.offlineRewardSummary = null;
+    this.contentData = null;
+  }
+
+  preload() {
+    this.load.json('content-zones', 'src/data/content/zones.json');
+    this.load.json('content-monsters', 'src/data/content/monsters.json');
+    this.load.json('content-items', 'src/data/content/items.json');
   }
 
   create() {
+    this.contentData = buildContentData({
+      zones: this.cache.json.get('content-zones') ?? [],
+      monsters: this.cache.json.get('content-monsters') ?? [],
+      items: this.cache.json.get('content-items') ?? [],
+    });
     this.combatState = this.loadGameState();
     this.buildLayout();
     this.bindResize();
     this.bindInputs();
-    this.bindSaveHooks();
-    this.startAutoSave();
     this.refreshUI();
     this.showOfflineRewardNotice();
     this.setupPersistence();
   }
 
-
-  loadCombatState() {
-    const rawSave = window.localStorage.getItem(this.saveStorageKey);
-    const restored = restoreState(rawSave);
-
-    this.combatState = restored.state;
-
-    if (!restored.meta.isValid) {
-      return;
-    }
-
-    const offlineSec = Math.max(0, Math.floor((Date.now() - restored.meta.savedAt) / 1000));
-    const reward = calculateOfflineReward(this.combatState, offlineSec, offlineRewardBalance);
-    this.combatState = applyOfflineReward(this.combatState, reward);
-
-    if (reward.killsGained > 0 || reward.goldGained > 0) {
-      this.offlineSummary = reward;
-    }
-  }
-
-  startAutoSave() {
-    this.saveTimer = this.time.addEvent({
-      delay: this.saveIntervalMs,
-      loop: true,
-      callback: () => {
-        this.saveCombatState();
-      },
-    });
-  }
-
-  bindSaveHooks() {
-    this.events.on(Phaser.Scenes.Events.SHUTDOWN, () => {
-      this.saveCombatState();
-      this.saveTimer?.remove?.();
-      this.saveTimer = null;
-      if (this.beforeUnloadHandler) {
-        window.removeEventListener('beforeunload', this.beforeUnloadHandler);
-        this.beforeUnloadHandler = null;
-      }
-    });
-
-    this.events.on(Phaser.Scenes.Events.DESTROY, () => {
-      this.saveCombatState();
-      this.saveTimer?.remove?.();
-      this.saveTimer = null;
-      if (this.beforeUnloadHandler) {
-        window.removeEventListener('beforeunload', this.beforeUnloadHandler);
-        this.beforeUnloadHandler = null;
-      }
-    });
-
-    this.beforeUnloadHandler = () => {
-      this.saveCombatState();
-    };
-    window.addEventListener('beforeunload', this.beforeUnloadHandler);
-  }
-
-  saveCombatState() {
-    if (!this.combatState) {
-      return;
-    }
-
-    const payload = buildSaveState(this.combatState, Date.now());
-    window.localStorage.setItem(this.saveStorageKey, JSON.stringify(payload));
-  }
-
   update(_time, delta) {
-    this.combatState = tickCombat(this.combatState, delta);
+    this.combatState = tickCombat(this.combatState, delta, this.contentData);
     this.refreshUI();
     this.animateCombatUnits();
   }
@@ -186,7 +128,7 @@ export default class UILayoutScene extends Phaser.Scene {
   }
 
   loadGameState() {
-    const fallbackState = createCombatState();
+    const fallbackState = createCombatState(this.contentData);
 
     const raw = window.localStorage.getItem(SAVE_STORAGE_KEY);
     if (!raw) {
@@ -204,7 +146,7 @@ export default class UILayoutScene extends Phaser.Scene {
       return fallbackState;
     }
 
-    const restored = restoreState(parsedSave);
+    const restored = restoreState(parsedSave, this.contentData);
     const now = Date.now();
     const offlineSec = Math.max(0, (now - (restored.meta.savedAt ?? now)) / 1000);
     const reward = calculateOfflineReward(restored.state, offlineSec);
@@ -454,6 +396,29 @@ export default class UILayoutScene extends Phaser.Scene {
       strokeThickness: 3,
       wordWrap: { width: bounds.w - 40, useAdvancedWrap: true },
     });
+
+    this.ui.zoneTitle = this.add.text(bounds.x + 20, bounds.y + 366, '지역 이동', {
+      fontFamily: 'Arial',
+      fontSize: '15px',
+      color: '#93c5fd',
+      fontStyle: 'bold',
+    });
+
+    const unlocked = this.combatState?.progression?.unlockedZoneIds ?? [];
+    this.ui.zoneButtons = unlocked.map((zoneId, index) => {
+      const zone = this.contentData.zonesById[zoneId];
+      const button = this.add
+        .rectangle(bounds.x + 34, bounds.y + 394 + index * 34, bounds.w - 68, 28, 0x1d4ed8)
+        .setOrigin(0)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerup', () => this.tryChangeZone(zoneId));
+      const text = this.add.text(bounds.x + 44, bounds.y + 400 + index * 34, zone?.name ?? zoneId, {
+        fontFamily: 'Arial',
+        fontSize: '13px',
+        color: '#dbeafe',
+      });
+      return { zoneId, button, text };
+    });
   }
 
   createBottomTabs(bounds) {
@@ -662,6 +627,12 @@ export default class UILayoutScene extends Phaser.Scene {
     this.refreshUI();
   }
 
+
+  tryChangeZone(zoneId) {
+    this.combatState = changeZone(this.combatState, zoneId, this.contentData);
+    this.refreshUI();
+  }
+
   animateCombatUnits() {
     if (!this.ui.monsterSprite || !this.ui.playerSprite) {
       return;
@@ -689,10 +660,17 @@ export default class UILayoutScene extends Phaser.Scene {
     const dps = calcDps(player);
     const survivability = calcSurvivability(player, monster);
 
+    const zoneName = this.contentData?.zonesById?.[progression.currentZoneId]?.name ?? '미지 지역';
+    const drops = Object.entries(this.combatState.inventory?.materials ?? {})
+      .slice(0, 3)
+      .map(([itemId, qty]) => `${this.contentData.itemsById?.[itemId]?.name ?? itemId} x${qty}`)
+      .join(', ');
+
     this.ui.combatMainInfo?.setText([
-      `현재 대상: ${monster.name} (Lv.${monster.level})`,
+      `현재 지역: ${zoneName} | 대상: ${monster.name} (Lv.${monster.level})`,
       `기사 HP ${player.hp}/${player.maxHp}  |  ${monster.name} HP ${monster.hp}/${monster.maxHp}`,
       `예상 DPS: ${dps} | 예상 생존 시간: ${survivability}초`,
+      `재료 보유: ${drops || '없음'}`,
     ]);
 
     this.ui.playHint?.setText(`최근 전투 요약: ${combat.lastEvent}`);
@@ -708,6 +686,7 @@ export default class UILayoutScene extends Phaser.Scene {
       `공격력 강화 Lv.${attackLevel} | 체력 강화 Lv.${healthLevel}`,
       `현재 공격력 ${player.atk} | 현재 최대HP ${player.maxHp}`,
       `DPS ${dps} | 생존 ${survivability}초`,
+      `해금 지역: ${(progression.unlockedZoneIds ?? []).length}개`,
     ]);
     this.ui.attackUpgradeText?.setText(`공격력 강화 (비용 ${attackCost}G)`);
     this.ui.healthUpgradeText?.setText(`체력 강화 (비용 ${healthCost}G)`);
@@ -724,6 +703,12 @@ export default class UILayoutScene extends Phaser.Scene {
 
     this.ui.tabButtons?.forEach(({ tab, button }) => {
       button.setFillStyle(tab === this.activeTab ? UI_THEME.tabActive : UI_THEME.tabInactive);
+    });
+
+    this.ui.zoneButtons?.forEach(({ zoneId, button, text }) => {
+      const isCurrent = zoneId === progression.currentZoneId;
+      button.setFillStyle(isCurrent ? 0x16a34a : 0x1d4ed8);
+      text.setColor(isCurrent ? '#dcfce7' : '#dbeafe');
     });
 
     this.ui.tabContent?.setText([

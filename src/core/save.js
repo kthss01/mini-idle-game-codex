@@ -1,9 +1,9 @@
 import { createCombatState, nextMonsterLevel } from './combatLogic.js';
-import { spawnMonster } from './spawnMonster.js';
 import { combatRules, playerBaseStats } from '../design/balance.js';
+import { getDefaultZone } from '../data/contentData.js';
 
-export const SAVE_VERSION = 1;
-export const SAVE_STORAGE_KEY = 'mini-idle-game-save-v1';
+export const SAVE_VERSION = 2;
+export const SAVE_STORAGE_KEY = 'mini-idle-game-save-v2';
 
 const toSafeNumber = (value, fallback = 0) => {
   const parsed = Number(value);
@@ -11,11 +11,7 @@ const toSafeNumber = (value, fallback = 0) => {
 };
 
 const toSafeInt = (value, fallback = 0) => Math.max(0, Math.floor(toSafeNumber(value, fallback)));
-
-const clampStat = (value, min = 0, max = Number.MAX_SAFE_INTEGER) => {
-  const numeric = toSafeNumber(value, min);
-  return Math.min(max, Math.max(min, numeric));
-};
+const clampStat = (value, min = 0, max = Number.MAX_SAFE_INTEGER) => Math.min(max, Math.max(min, toSafeNumber(value, min)));
 
 export const buildSaveState = (gameState, now = Date.now()) => ({
   version: SAVE_VERSION,
@@ -29,31 +25,43 @@ export const buildSaveState = (gameState, now = Date.now()) => ({
   },
   progress: {
     stage: toSafeInt(gameState?.progression?.difficultyLevel, 1) || 1,
-    wave: toSafeInt(gameState?.progression?.killCount, 0),
     totalKills: toSafeInt(gameState?.progression?.killCount, 0),
+    currentZoneId: gameState?.progression?.currentZoneId ?? null,
+    unlockedZoneIds: Array.isArray(gameState?.progression?.unlockedZoneIds)
+      ? gameState.progression.unlockedZoneIds
+      : [],
   },
   equipment: {
-    owned: ['기사단 성장 제단'],
-    equipped: '기사단 성장 제단',
     upgrades: {
       attackLevel: toSafeInt(gameState?.progression?.upgrades?.attackLevel, 0),
       healthLevel: toSafeInt(gameState?.progression?.upgrades?.healthLevel, 0),
     },
   },
+  inventory: {
+    materials: gameState?.inventory?.materials ?? {},
+  },
 });
 
-const hydrateCombatState = (saveData) => {
-  const base = createCombatState();
+const hydrateCombatState = (saveData, contentData) => {
+  const base = createCombatState(contentData);
   const stage = Math.max(1, toSafeInt(saveData.progress?.stage, 1));
   const killCount = toSafeInt(saveData.progress?.totalKills, 0);
-  const attackLevel = toSafeInt(saveData.equipment?.upgrades?.attackLevel, 0);
-  const healthLevel = toSafeInt(saveData.equipment?.upgrades?.healthLevel, 0);
-
-  const nextMonster = spawnMonster(stage);
-  const normalizedDifficulty = nextMonsterLevel(killCount);
-
+  const difficulty = Math.max(stage, nextMonsterLevel(killCount));
   const maxHp = clampStat(saveData.playerStats?.maxHp, 1);
-  const hp = clampStat(saveData.playerStats?.hp, 1, maxHp);
+
+  const nextProgression = {
+    ...base.progression,
+    killCount,
+    difficultyLevel: difficulty,
+    currentZoneId: saveData.progress?.currentZoneId ?? base.progression.currentZoneId ?? getDefaultZone(contentData)?.id,
+    unlockedZoneIds: Array.isArray(saveData.progress?.unlockedZoneIds) && saveData.progress.unlockedZoneIds.length > 0
+      ? saveData.progress.unlockedZoneIds
+      : base.progression.unlockedZoneIds,
+    upgrades: {
+      attackLevel: toSafeInt(saveData.equipment?.upgrades?.attackLevel, 0),
+      healthLevel: toSafeInt(saveData.equipment?.upgrades?.healthLevel, 0),
+    },
+  };
 
   return {
     ...base,
@@ -62,33 +70,26 @@ const hydrateCombatState = (saveData) => {
       ...base.player,
       atk: clampStat(saveData.playerStats?.atk, playerBaseStats.atk),
       maxHp,
-      hp,
+      hp: clampStat(saveData.playerStats?.hp, 1, maxHp),
       cooldownMs: clampStat(saveData.playerStats?.cooldownMs, playerBaseStats.attackCooldownMs),
       cooldownLeftMs: clampStat(saveData.playerStats?.cooldownMs, playerBaseStats.attackCooldownMs),
     },
     monster: {
-      ...nextMonster,
+      ...base.monster,
       cooldownMs: combatRules.monsterAttackCooldownMs,
       cooldownLeftMs: combatRules.monsterAttackCooldownMs,
     },
-    progression: {
-      ...base.progression,
-      killCount,
-      difficultyLevel: Math.max(stage, normalizedDifficulty),
-      upgrades: {
-        attackLevel,
-        healthLevel,
-      },
+    progression: nextProgression,
+    inventory: {
+      materials: saveData.inventory?.materials ?? {},
+      lastDrops: [],
     },
   };
 };
 
-export const restoreState = (rawSave) => {
+export const restoreState = (rawSave, contentData) => {
   if (!rawSave || typeof rawSave !== 'object') {
-    return {
-      state: createCombatState(),
-      meta: { isFallback: true, reason: 'invalid-save-object', savedAt: Date.now() },
-    };
+    return { state: createCombatState(contentData), meta: { isFallback: true, reason: 'invalid-save-object', savedAt: Date.now() } };
   }
 
   const normalizedSave = {
@@ -103,21 +104,23 @@ export const restoreState = (rawSave) => {
     },
     progress: {
       stage: Math.max(1, toSafeInt(rawSave.progress?.stage, 1)),
-      wave: toSafeInt(rawSave.progress?.wave, 0),
       totalKills: toSafeInt(rawSave.progress?.totalKills, rawSave.progress?.wave ?? 0),
+      currentZoneId: rawSave.progress?.currentZoneId ?? null,
+      unlockedZoneIds: Array.isArray(rawSave.progress?.unlockedZoneIds) ? rawSave.progress.unlockedZoneIds : [],
     },
     equipment: {
-      owned: Array.isArray(rawSave.equipment?.owned) ? rawSave.equipment.owned : ['기사단 성장 제단'],
-      equipped: rawSave.equipment?.equipped ?? '기사단 성장 제단',
       upgrades: {
         attackLevel: toSafeInt(rawSave.equipment?.upgrades?.attackLevel, 0),
         healthLevel: toSafeInt(rawSave.equipment?.upgrades?.healthLevel, 0),
       },
     },
+    inventory: {
+      materials: rawSave.inventory?.materials ?? {},
+    },
   };
 
   return {
-    state: hydrateCombatState(normalizedSave),
+    state: hydrateCombatState(normalizedSave, contentData),
     meta: {
       isFallback: false,
       reason: null,

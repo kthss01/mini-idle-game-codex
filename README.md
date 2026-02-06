@@ -12,6 +12,13 @@ codex 를 이용한 idle 게임 만들기
 - `index.html` 과 `src/` 경로가 모두 상대 경로로 구성되어 있어 별도의 base path 설정이 필요하지 않습니다.
 
 
+
+## PR5 콘텐츠 데이터(JSON)
+
+- 콘텐츠 데이터는 `src/data/content/zones.json`, `src/data/content/monsters.json`, `src/data/content/items.json` 에서 관리됩니다.
+- 몬스터 추가는 `monsters.json` 에 몬스터를 추가하고, `zones.json` 의 `monsterPool` 에 해당 id를 넣으면 코드 수정 없이 반영됩니다.
+- 지역 해금은 `zones.json` 의 `unlockStage` 기준으로 동작합니다.
+
 ## 전투 MVP 동작 검증
 
 PR2 요구사항(자동 처치/골드 획득 반복, 난이도 증가)을 빠르게 확인하려면 아래 명령을 실행하세요.
