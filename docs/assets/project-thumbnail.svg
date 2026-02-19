@@ -1,0 +1,42 @@
+<svg width="1280" height="720" viewBox="0 0 1280 720" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Mini Idle Game Codex Thumbnail</title>
+  <desc id="desc">미니 아이들 게임 코덱스 프로젝트용 썸네일 이미지</desc>
+
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1280" y2="720" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0F172A"/>
+      <stop offset="0.5" stop-color="#1E293B"/>
+      <stop offset="1" stop-color="#0B1120"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="240" y1="180" x2="980" y2="560" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#22D3EE"/>
+      <stop offset="1" stop-color="#A78BFA"/>
+    </linearGradient>
+    <filter id="softGlow" x="0" y="0" width="1280" height="720" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="30"/>
+    </filter>
+  </defs>
+
+  <rect width="1280" height="720" fill="url(#bg)"/>
+
+  <circle cx="250" cy="120" r="140" fill="#22D3EE" opacity="0.22" filter="url(#softGlow)"/>
+  <circle cx="1060" cy="620" r="170" fill="#A78BFA" opacity="0.22" filter="url(#softGlow)"/>
+
+  <rect x="132" y="114" width="1016" height="492" rx="28" fill="#0B1220" stroke="#334155" stroke-width="2"/>
+  <rect x="168" y="154" width="944" height="412" rx="22" fill="#0F172A"/>
+
+  <text x="200" y="264" fill="#E2E8F0" font-family="Pretendard, Inter, 'Segoe UI', sans-serif" font-size="64" font-weight="700" letter-spacing="1.2">MINI IDLE GAME</text>
+  <text x="200" y="336" fill="url(#accent)" font-family="Pretendard, Inter, 'Segoe UI', sans-serif" font-size="74" font-weight="800" letter-spacing="2">CODEX</text>
+
+  <text x="202" y="402" fill="#94A3B8" font-family="Pretendard, Inter, 'Segoe UI', sans-serif" font-size="28" font-weight="500">자동 전투 · 성장 · 저장/오프라인 보상</text>
+
+  <g transform="translate(200 448)">
+    <rect width="880" height="86" rx="16" fill="#111827" stroke="#1F2937"/>
+    <rect x="24" y="24" width="220" height="16" rx="8" fill="#22D3EE" opacity="0.9"/>
+    <rect x="24" y="50" width="310" height="12" rx="6" fill="#334155"/>
+    <rect x="404" y="26" width="196" height="14" rx="7" fill="#A78BFA" opacity="0.9"/>
+    <rect x="404" y="50" width="240" height="12" rx="6" fill="#334155"/>
+    <rect x="700" y="22" width="156" height="40" rx="12" fill="#0EA5E9"/>
+    <text x="778" y="48" text-anchor="middle" fill="#E0F2FE" font-family="Pretendard, Inter, 'Segoe UI', sans-serif" font-size="18" font-weight="700">PLAY</text>
+  </g>
+</svg>
