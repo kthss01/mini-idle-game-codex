@@ -1,6 +1,8 @@
 # mini-idle-game-codex
 codex 를 이용한 idle 게임 만들기
 
+![mini-idle-game-codex 썸네일](docs/assets/project-thumbnail.svg)
+
 ## 실행 방법
 
 이 프로젝트는 정적 파일만으로 구성되어 있습니다. 로컬에서 확인하려면 프로젝트 루트의
